@@ -39,7 +39,8 @@ func (walker *SerialHashWalker) HashWalk(root string) (map[string]hash.Hash, err
 			return nil
 		}
 
-		hash, err := walker.makeHashForFile(path, info)
+		outHash := walker.constructor()
+		err = hashFile(outHash, path, info)
 		if err == errNotFile {
 			// If we don't have a file, continue to the next one.
 			return nil
@@ -47,7 +48,7 @@ func (walker *SerialHashWalker) HashWalk(root string) (map[string]hash.Hash, err
 			return xerrors.Errorf("could not process walked file: %w", err)
 		}
 
-		walkedMap[path] = hash
+		walkedMap[path] = outHash
 		return nil
 	})
 
@@ -60,21 +61,20 @@ func (walker *SerialHashWalker) HashWalk(root string) (map[string]hash.Hash, err
 
 // makehashForFile generates a hash for the given file, provided that it is a regular file.
 // Returns errNotFile if the path is not a regular file
-func (walker *SerialHashWalker) makeHashForFile(path string, info os.FileInfo) (hash.Hash, error) {
+func hashFile(h hash.Hash, path string, info os.FileInfo) error {
 	if !info.Mode().IsRegular() {
-		return nil, errNotFile
+		return errNotFile
 	}
 
-	f, err := os.Open(path)
+	fileHandle, err := os.Open(path)
 	if err != nil {
-		return nil, xerrors.Errorf("failed to open file (%s) to hash: %w", path, err)
+		return xerrors.Errorf("failed to open file (%s) to hash: %w", path, err)
 	}
 
-	hash := walker.constructor()
-	_, err = io.Copy(hash, f)
+	_, err = io.Copy(h, fileHandle)
 	if err != nil {
-		return nil, xerrors.Errorf("could not hash file (%s): %w", path, err)
+		return xerrors.Errorf("could not hash file (%s): %w", path, err)
 	}
 
-	return hash, nil
+	return nil
 }
