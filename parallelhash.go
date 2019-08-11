@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"hash"
 	"io"
-	"log"
 	"sync"
 
+	"github.com/ollien/xtrace"
 	"golang.org/x/xerrors"
 )
 
@@ -54,8 +55,8 @@ func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash,
 	outMap := sync.Map{}
 	collectWaitGroup := sync.WaitGroup{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	go hasher.collectResults(&collectWaitGroup, cancelFunc, channels, &outMap)
-	go collectErrors(channels.errorChan)
+	go hasher.collectResults(ctx, &collectWaitGroup, channels, &outMap)
+	go collectErrors(channels.errorChan, cancelFunc)
 
 	workerWaitGroup := sync.WaitGroup{}
 	hasher.spawnWorkers(ctx, channels, &workerWaitGroup, func(reader io.Reader) (hash.Hash, error) {
@@ -69,7 +70,11 @@ func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash,
 	})
 
 	err := hasher.walker.Walk(root, func(reader pathedReader) error {
-		channels.workChan <- reader
+		select {
+		case channels.workChan <- reader:
+		case <-ctx.Done():
+			return errors.New("one of the workers experienced an error - work could not be sent")
+		}
 
 		return nil
 	})
@@ -101,14 +106,12 @@ func (hasher ParallelWalkHasher) spawnWorkers(ctx context.Context, channels para
 
 // doHashWork provides all of the coordination needed for workers to process hashes
 func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet, process func(io.Reader) (hash.Hash, error)) {
-	done := false
-	for !done {
+	for {
 		select {
 		case reader, ok := <-channels.workChan:
 			// If there's no work left, we're done.
 			if !ok {
-				done = true
-				break
+				return
 			}
 
 			outHash, err := process(reader.reader)
@@ -121,36 +124,37 @@ func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parall
 				path: reader.path,
 				hash: outHash,
 			}
-			channels.hashChan <- result
+
+			// Send on the channel if we can, but we may need to bail out early.
+			select {
+			case channels.hashChan <- result:
+			case <-ctx.Done():
+				return
+			}
 		case <-ctx.Done():
-			done = true
+			return
 		}
 	}
 }
 
 // collectResults collects all of the results from workers
-func (hasher ParallelWalkHasher) collectResults(waitGroup *sync.WaitGroup, cancelFunc context.CancelFunc, channels parallelWalkHasherChannelSet, outMap *sync.Map) error {
+func (hasher ParallelWalkHasher) collectResults(ctx context.Context, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
 	waitGroup.Add(1)
 	defer waitGroup.Done()
 
-	done := false
-	for !done {
+	for {
 		select {
 		case result, ok := <-channels.hashChan:
 			// If we have no more values to recieve, then we're done.
 			if !ok {
-				done = true
-				break
+				return
 			}
 
 			outMap.Store(result.path, result.hash)
-		case err := <-channels.errorChan:
-			cancelFunc()
-			return err
+		case <-ctx.Done():
+			return
 		}
 	}
-
-	return nil
 }
 
 func (hasher ParallelWalkHasher) convertSyncMapToResultMap(syncMap *sync.Map) map[string]hash.Hash {
@@ -167,9 +171,10 @@ func (hasher ParallelWalkHasher) convertSyncMapToResultMap(syncMap *sync.Map) ma
 	return resultMap
 }
 
-// collectErrors will collect all errors from the given error channel and log them
-func collectErrors(errorChan chan error) {
+// collectErrors will collect all errors from the given error channel and log them, then cancel the context for the pool
+func collectErrors(errorChan chan error, cancelFunc context.CancelFunc) {
 	for err := range errorChan {
-		log.Println(err)
+		xtrace.Trace(err)
+		cancelFunc()
 	}
 }

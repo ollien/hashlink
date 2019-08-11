@@ -19,7 +19,7 @@ func main() {
 	}
 
 	srcDir := flag.Arg(0)
-	hasher := NewSerialWalkHasher(sha256.New)
+	hasher := NewParallelWalkHasher(2, sha256.New)
 	hashes, err := hasher.WalkAndHash(srcDir)
 	if err != nil {
 		xtrace.Trace(err)
