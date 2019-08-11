@@ -12,16 +12,22 @@ import (
 
 // closableStringReader serves as a wrapper for *strings.Reader to allow it to implement the io.ReadCloser interface
 type closableStringReader struct {
+	closeCount int
 	*strings.Reader
 }
 
 // staticWalker is a mock walker for use with testing
 type staticWalker struct {
+	// A map of file names to file contents
 	files map[string]string
+	// A map of file names to closableStringReaders
+	readers map[string]*closableStringReader
 }
 
 // Close will simply nop. Implemented so strings.Reader can fufill the ReadCloser interface.
-func (r closableStringReader) Close() error {
+func (r *closableStringReader) Close() error {
+	r.closeCount++
+
 	return nil
 }
 
@@ -29,8 +35,9 @@ func (r closableStringReader) Close() error {
 // process must close the file once it is doneA.
 func (walker staticWalker) Walk(root string, process func(reader pathedData) error) error {
 	// Ignore the root - it doesn't matter for our case here.
-	for filename, file := range walker.files {
-		reader := closableStringReader{strings.NewReader(file)}
+	for filename, contents := range walker.files {
+		reader := &closableStringReader{Reader: strings.NewReader(contents)}
+		walker.readers[filename] = reader
 		err := process(pathedData{path: filename, data: reader})
 		if err != nil {
 			return err
@@ -68,7 +75,7 @@ func testWalkHasherInterface(t *testing.T, makeHasher func(walker pathWalker, ha
 	}
 	expectedFiles := []string{"a/b", "a/bb/c", "a/bb/d", "a/bb/e"}
 
-	walker := staticWalker{files: files}
+	walker := staticWalker{files: files, readers: make(map[string]*closableStringReader, len(files))}
 	hasher := makeHasher(walker, sha256.New)
 	walkedHashes, err := hasher.WalkAndHash("a")
 	assert.Nil(t, err)
@@ -83,4 +90,10 @@ func testWalkHasherInterface(t *testing.T, makeHasher func(walker pathWalker, ha
 	}
 
 	assert.ElementsMatch(t, expectedFiles, hashedFiles)
+	// Ensure that we have made ar eader for every single file
+	assert.Equal(t, len(files), len(walker.readers))
+	// Assert that every file has been closed exactly once.
+	for filename, reader := range walker.readers {
+		assert.Equal(t, 1, reader.closeCount, "file="+filename)
+	}
 }
