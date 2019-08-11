@@ -7,7 +7,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ollien/xtrace"
 	"golang.org/x/xerrors"
 )
 
@@ -16,6 +15,8 @@ type ParallelWalkHasher struct {
 	constructor func() hash.Hash
 	walker      pathWalker
 	numWorkers  int
+	errors      []error
+	errorLock   sync.RWMutex
 }
 
 // hashResult represents the result of a hashing operation.
@@ -35,15 +36,15 @@ type parallelWalkHasherChannelSet struct {
 }
 
 // NewParallelWalkHasher makekes a new hash walker with a constructor for a hash algorithm and a number of workers
-func NewParallelWalkHasher(numWorkers int, constructor func() hash.Hash) ParallelWalkHasher {
+func NewParallelWalkHasher(numWorkers int, constructor func() hash.Hash) *ParallelWalkHasher {
 	walker := fileWalker{}
 
 	return makeParallelHashWalker(numWorkers, walker, constructor)
 }
 
 // makeParallelHashWalker will build a serial hash walker with the given spec. Used mainly as faux-dependency injection
-func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func() hash.Hash) ParallelWalkHasher {
-	return ParallelWalkHasher{
+func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func() hash.Hash) *ParallelWalkHasher {
+	return &ParallelWalkHasher{
 		walker:      walker,
 		constructor: constructor,
 		numWorkers:  numWorkers,
@@ -51,7 +52,7 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 }
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
-func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
+func (hasher *ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
 	// the work chan may have been closed from a previous run, so we should make a new one
 	channels := parallelWalkHasherChannelSet{
 		workChan:   make(chan pathedData),
@@ -92,25 +93,36 @@ func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash,
 	}
 
 	workerWaitGroup.Wait()
-	close(channels.resultChan)
 	collectWaitGroup.Wait()
+	err = hasher.generateWalkError()
 
-	return hasher.convertSyncMapToResultMap(&outMap), nil
+	return convertSyncMapToResultMap(&outMap), err
 }
 
 // spawnWorkers spawns all workers needed for hashing
-func (hasher ParallelWalkHasher) spawnWorkers(ctx context.Context, channels parallelWalkHasherChannelSet, waitGroup *sync.WaitGroup, process func(io.ReadCloser) (hash.Hash, error)) {
+func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, channels parallelWalkHasherChannelSet, waitGroup *sync.WaitGroup, process func(io.ReadCloser) (hash.Hash, error)) {
+	workerChannels := make([]chan hashResult, hasher.numWorkers)
 	for i := 0; i < hasher.numWorkers; i++ {
+		workerChannel := make(chan hashResult)
+		workerChannels[i] = workerChannel
+		// Create a set of channels for this specific worker.
+		workerChannelSet := parallelWalkHasherChannelSet{
+			workChan:   channels.workChan,
+			resultChan: workerChannel,
+		}
 		go func() {
 			waitGroup.Add(1)
-			hasher.doHashWork(ctx, channels, process)
+			hasher.doHashWork(ctx, workerChannelSet, process)
 			waitGroup.Done()
 		}()
 	}
+
+	go mergeResultChannels(workerChannels, channels.resultChan)
 }
 
 // doHashWork provides all of the coordination needed for workers to process hashes
-func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet, process func(io.ReadCloser) (hash.Hash, error)) {
+func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet, process func(io.ReadCloser) (hash.Hash, error)) {
+	defer close(channels.resultChan)
 	for {
 		select {
 		case reader, ok := <-channels.workChan:
@@ -139,7 +151,7 @@ func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parall
 }
 
 // collectResults collects all of the results from workers
-func (hasher ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
+func (hasher *ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
 	waitGroup.Add(1)
 	defer waitGroup.Done()
 
@@ -150,11 +162,11 @@ func (hasher ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc 
 			if !ok {
 				return
 			} else if result.err != nil {
-				// If we've received an erorr, we can't proceed, so we must cancel all other routines.
-				// TODO: We should do more than just log the error, since we can get more than one.
-				xtrace.Trace(result.err)
-				cancelFunc()
-				return
+				// If we've received an erorr, we should store it and move on.
+				hasher.errorLock.Lock()
+				hasher.errors = append(hasher.errors, result.err)
+				hasher.errorLock.Unlock()
+				continue
 			}
 
 			outMap.Store(result.path, result.hash)
@@ -164,7 +176,28 @@ func (hasher ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc 
 	}
 }
 
-func (hasher ParallelWalkHasher) convertSyncMapToResultMap(syncMap *sync.Map) map[string]hash.Hash {
+// Errors will return all errors that occured during walking.
+func (hasher *ParallelWalkHasher) Errors() []error {
+	errorsCopy := make([]error, len(hasher.errors))
+	hasher.errorLock.RLock()
+	defer hasher.errorLock.RUnlock()
+	copy(errorsCopy, hasher.errors)
+
+	return errorsCopy
+}
+
+func (hasher *ParallelWalkHasher) generateWalkError() (err error) {
+	hasher.errorLock.RLock()
+	defer hasher.errorLock.RUnlock()
+	if len(hasher.errors) > 0 {
+		err = errors.New("errors occured during hashing; check .Errors()")
+	}
+
+	return
+}
+
+// convertSyncMapToResultMap takes a syncMap and converts it to a result of parallel
+func convertSyncMapToResultMap(syncMap *sync.Map) map[string]hash.Hash {
 	resultMap := make(map[string]hash.Hash)
 	syncMap.Range(func(key, value interface{}) bool {
 		// We should panic if these values aren't the correct type - there is no way we can produce a result that is correct
@@ -176,4 +209,22 @@ func (hasher ParallelWalkHasher) convertSyncMapToResultMap(syncMap *sync.Map) ma
 	})
 
 	return resultMap
+}
+
+// mergeResultChannels will merge all channels of hashResult into a single channel
+func mergeResultChannels(workerChannels []chan hashResult, outChannel chan hashResult) {
+	waitGroup := sync.WaitGroup{}
+	for _, workerChan := range workerChannels {
+		waitGroup.Add(1)
+		go func(workerChan chan hashResult) {
+			for result := range workerChan {
+				outChannel <- result
+			}
+			waitGroup.Done()
+		}(workerChan)
+	}
+
+	// When we're done merging all of the results, we can safely close the channel
+	waitGroup.Wait()
+	close(outChannel)
 }
