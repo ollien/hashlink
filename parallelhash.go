@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"hash"
-	"io"
 	"sync"
 
 	"golang.org/x/xerrors"
@@ -65,17 +64,7 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash
 	go hasher.collectResults(ctx, cancelFunc, &collectWaitGroup, channels, &outMap)
 
 	workerWaitGroup := sync.WaitGroup{}
-	hasher.spawnWorkers(ctx, channels, &workerWaitGroup, func(data io.ReadCloser) (hash.Hash, error) {
-		outHash := hasher.constructor()
-		defer data.Close()
-		err := hashReader(outHash, data)
-		if err != nil {
-			return nil, xerrors.Errorf("could not hash reader in worker: %w", err)
-		}
-
-		return outHash, nil
-	})
-
+	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
 	err := hasher.walker.Walk(root, func(reader pathedData) error {
 		select {
 		case channels.workChan <- reader:
@@ -100,7 +89,7 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash
 }
 
 // spawnWorkers spawns all workers needed for hashing
-func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, channels parallelWalkHasherChannelSet, waitGroup *sync.WaitGroup, process func(io.ReadCloser) (hash.Hash, error)) {
+func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet) {
 	workerChannels := make([]chan hashResult, hasher.numWorkers)
 	for i := 0; i < hasher.numWorkers; i++ {
 		workerChannel := make(chan hashResult)
@@ -112,7 +101,7 @@ func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, channels par
 		}
 		go func() {
 			waitGroup.Add(1)
-			hasher.doHashWork(ctx, workerChannelSet, process)
+			hasher.doHashWork(ctx, workerChannelSet)
 			waitGroup.Done()
 		}()
 	}
@@ -121,7 +110,7 @@ func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, channels par
 }
 
 // doHashWork provides all of the coordination needed for workers to process hashes
-func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet, process func(io.ReadCloser) (hash.Hash, error)) {
+func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet) {
 	defer close(channels.resultChan)
 	for {
 		select {
@@ -131,7 +120,13 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels paral
 				return
 			}
 
-			outHash, err := process(reader.data)
+			outHash := hasher.constructor()
+			defer reader.data.Close()
+			err := hashReader(outHash, reader.data)
+			if err != nil {
+				err = xerrors.Errorf("could not hash reader in worker: %w", err)
+			}
+
 			result := hashResult{
 				path: reader.path,
 				hash: outHash,
