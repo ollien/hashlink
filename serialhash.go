@@ -14,15 +14,15 @@ type SerialWalkHasher struct {
 }
 
 // NewSerialWalkHasher makes a new serial hasher with a constructor for a hash algorithm
-func NewSerialWalkHasher(constructor func() hash.Hash) SerialWalkHasher {
+func NewSerialWalkHasher(constructor func() hash.Hash) *SerialWalkHasher {
 	walker := fileWalker{}
 
 	return makeSerialHashWalker(walker, constructor)
 }
 
 // makeSerialHashWalker will build a serial hash walker with the given spec. Used mainly as faux-dependency injection
-func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash) SerialWalkHasher {
-	return SerialWalkHasher{
+func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash) *SerialWalkHasher {
+	return &SerialWalkHasher{
 		walker:      walker,
 		constructor: constructor,
 	}
