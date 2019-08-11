@@ -1,4 +1,4 @@
-module github.com/ollien/linker
+module github.com/ollien/hashlink
 
 require (
 	github.com/ollien/xtrace v0.2.0

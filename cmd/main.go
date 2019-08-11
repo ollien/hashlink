@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ollien/hashlink"
 	"github.com/ollien/xtrace"
 )
 
-const usage = "Usage: ./linker src_dir"
+const usage = "Usage: ./hashlink src_dir"
 
 func main() {
 	flag.Parse()
@@ -19,7 +20,7 @@ func main() {
 	}
 
 	srcDir := flag.Arg(0)
-	hasher := NewParallelWalkHasher(2, sha256.New)
+	hasher := hashlink.NewParallelWalkHasher(2, sha256.New)
 	hashes, err := hasher.WalkAndHash(srcDir)
 	if err != nil {
 		xtrace.Trace(err)
