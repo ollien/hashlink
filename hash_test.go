@@ -35,6 +35,12 @@ func TestSerialWalkHasher_HashWalk(t *testing.T) {
 	})
 }
 
+func TestParallelWalkhasher_HashWalk(t *testing.T) {
+	testWalkHasherInterface(t, func(walker pathWalker, hashConstructor func() hash.Hash) WalkHasher {
+		return makeParallelHashWalker(2, walker, hashConstructor)
+	})
+}
+
 func testWalkHasherInterface(t *testing.T, makeHasher func(walker pathWalker, hashConstructor func() hash.Hash) WalkHasher) {
 	files := map[string]string{
 		"a/b":    "hello world",

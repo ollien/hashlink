@@ -8,16 +8,22 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// pathedReader represents a reader that has an associated path
+type pathedReader struct {
+	path   string
+	reader io.Reader
+}
+
 type pathWalker interface {
 	// Walk takes a path and a function to process the file as an io.Reader.
-	Walk(root string, process func(path string, reader io.Reader) error) error
+	Walk(root string, process func(reader pathedReader) error) error
 }
 
 // fileWalker will only walk regular files
 type fileWalker struct{}
 
 // Walk acts as a simple wrapper for filepath.Walk, only processing regular files
-func (walker fileWalker) Walk(path string, process func(path string, reader io.Reader) error) error {
+func (walker fileWalker) Walk(path string, process func(reader pathedReader) error) error {
 	return filepath.Walk(path, func(walkedPath string, info os.FileInfo, err error) error {
 		// If we don't have a regular file, continue
 		if !info.Mode().IsRegular() {
@@ -30,6 +36,6 @@ func (walker fileWalker) Walk(path string, process func(path string, reader io.R
 		}
 
 		defer file.Close()
-		return process(walkedPath, file)
+		return process(pathedReader{path: walkedPath, reader: file})
 	})
 }
