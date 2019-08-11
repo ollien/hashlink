@@ -18,13 +18,20 @@ type ParallelWalkHasher struct {
 	numWorkers  int
 }
 
+// hashResult represents the result of a hashing operation.
+type hashResult struct {
+	path string
+	// hash represents the hash of the data located at path
+	hash hash.Hash
+	// If an error occured during operation, then err will be non-nil.
+	err error
+}
+
 type parallelWalkHasherChannelSet struct {
 	// all io.Readers to hash will be sent to the workers through workChan
 	workChan chan pathedData
-	// all resulting hashes will be sent from the workers through hashChan
-	hashChan chan pathedHash
-	// all resulting errors will be sent from the workers through errorChan
-	errorChan chan error
+	// all resulting hashes will be sent from the workers through resultChan
+	resultChan chan hashResult
 }
 
 // NewParallelWalkHasher makekes a new hash walker with a constructor for a hash algorithm and a number of workers
@@ -47,16 +54,14 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
 	// the work chan may have been closed from a previous run, so we should make a new one
 	channels := parallelWalkHasherChannelSet{
-		workChan:  make(chan pathedData),
-		hashChan:  make(chan pathedHash),
-		errorChan: make(chan error),
+		workChan:   make(chan pathedData),
+		resultChan: make(chan hashResult),
 	}
 
 	outMap := sync.Map{}
 	collectWaitGroup := sync.WaitGroup{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	go hasher.collectResults(ctx, &collectWaitGroup, channels, &outMap)
-	go collectErrors(channels.errorChan, cancelFunc)
+	go hasher.collectResults(ctx, cancelFunc, &collectWaitGroup, channels, &outMap)
 
 	workerWaitGroup := sync.WaitGroup{}
 	hasher.spawnWorkers(ctx, channels, &workerWaitGroup, func(data io.ReadCloser) (hash.Hash, error) {
@@ -87,9 +92,8 @@ func (hasher ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash,
 	}
 
 	workerWaitGroup.Wait()
-	close(channels.hashChan)
+	close(channels.resultChan)
 	collectWaitGroup.Wait()
-	close(channels.errorChan)
 
 	return hasher.convertSyncMapToResultMap(&outMap), nil
 }
@@ -116,19 +120,15 @@ func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parall
 			}
 
 			outHash, err := process(reader.data)
-			if err != nil {
-				channels.errorChan <- err
-				continue
-			}
-
-			result := pathedHash{
+			result := hashResult{
 				path: reader.path,
 				hash: outHash,
+				err:  err,
 			}
 
 			// Send on the channel if we can, but we may need to bail out early.
 			select {
-			case channels.hashChan <- result:
+			case channels.resultChan <- result:
 			case <-ctx.Done():
 				return
 			}
@@ -139,15 +139,21 @@ func (hasher ParallelWalkHasher) doHashWork(ctx context.Context, channels parall
 }
 
 // collectResults collects all of the results from workers
-func (hasher ParallelWalkHasher) collectResults(ctx context.Context, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
+func (hasher ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
 	waitGroup.Add(1)
 	defer waitGroup.Done()
 
 	for {
 		select {
-		case result, ok := <-channels.hashChan:
+		case result, ok := <-channels.resultChan:
 			// If we have no more values to recieve, then we're done.
 			if !ok {
+				return
+			} else if result.err != nil {
+				// If we've received an erorr, we can't proceed, so we must cancel all other routines.
+				// TODO: We should do more than just log the error, since we can get more than one.
+				xtrace.Trace(result.err)
+				cancelFunc()
 				return
 			}
 
@@ -170,12 +176,4 @@ func (hasher ParallelWalkHasher) convertSyncMapToResultMap(syncMap *sync.Map) ma
 	})
 
 	return resultMap
-}
-
-// collectErrors will collect all errors from the given error channel and log them, then cancel the context for the pool
-func collectErrors(errorChan chan error, cancelFunc context.CancelFunc) {
-	for err := range errorChan {
-		xtrace.Trace(err)
-		cancelFunc()
-	}
 }

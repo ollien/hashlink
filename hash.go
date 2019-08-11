@@ -16,12 +16,6 @@ type WalkHasher interface {
 	WalkAndHash(root string) (map[string]hash.Hash, error)
 }
 
-// pathedHash represents a hash associated with a path
-type pathedHash struct {
-	path string
-	hash hash.Hash
-}
-
 // hashReader will hash a reader into the given hash interface, h
 func hashReader(h hash.Hash, reader io.Reader) (retErr error) {
 	_, err := io.Copy(h, reader)
