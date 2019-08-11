@@ -138,12 +138,7 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels paral
 				err:  err,
 			}
 
-			// Send on the channel if we can, but we may need to bail out early.
-			select {
-			case channels.resultChan <- result:
-			case <-ctx.Done():
-				return
-			}
+			channels.resultChan <- result
 		case <-ctx.Done():
 			return
 		}
@@ -186,6 +181,7 @@ func (hasher *ParallelWalkHasher) Errors() []error {
 	return errorsCopy
 }
 
+// generateWalkErrors generates an error if any have occured during the hashing process
 func (hasher *ParallelWalkHasher) generateWalkError() (err error) {
 	hasher.errorLock.RLock()
 	defer hasher.errorLock.RUnlock()
