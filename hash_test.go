@@ -10,17 +10,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// closableStringReader serves as a wrapper for *strings.Reader to allow it to implement the io.ReadCloser interface
+type closableStringReader struct {
+	*strings.Reader
+}
+
 // staticWalker is a mock walker for use with testing
 type staticWalker struct {
 	files map[string]string
 }
 
-// Walk will simply return io.Readers of all of the files within files
-func (walker staticWalker) Walk(root string, process func(reader pathedReader) error) error {
+// Close will simply nop. Implemented so strings.Reader can fufill the ReadCloser interface.
+func (r closableStringReader) Close() error {
+	return nil
+}
+
+// Walk will simply return io.ReadClosers (within pathedData) of all of the files within the given root. Note that
+// process must close the file once it is doneA.
+func (walker staticWalker) Walk(root string, process func(reader pathedData) error) error {
 	// Ignore the root - it doesn't matter for our case here.
 	for filename, file := range walker.files {
-		reader := strings.NewReader(file)
-		err := process(pathedReader{path: filename, reader: reader})
+		reader := closableStringReader{strings.NewReader(file)}
+		err := process(pathedData{path: filename, data: reader})
 		if err != nil {
 			return err
 		}

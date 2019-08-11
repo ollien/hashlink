@@ -32,9 +32,10 @@ func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash) Seria
 func (hasher SerialWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
 	walkedMap := make(map[string]hash.Hash)
 	// Walk all of the files and collect hashes for them
-	err := hasher.walker.Walk(root, func(reader pathedReader) error {
+	err := hasher.walker.Walk(root, func(reader pathedData) error {
+		defer reader.data.Close()
 		outHash := hasher.constructor()
-		err := hashReader(outHash, reader.reader)
+		err := hashReader(outHash, reader.data)
 		if err != nil {
 			return xerrors.Errorf("could not hash path (%s): %w", reader.path, err)
 		}
