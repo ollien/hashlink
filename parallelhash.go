@@ -51,7 +51,7 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 }
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
-func (hasher *ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
+func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	// the work chan may have been closed from a previous run, so we should make a new one
 	channels := parallelWalkHasherChannelSet{
 		workChan:   make(chan pathedData),
@@ -85,7 +85,7 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (map[string]hash.Hash
 	collectWaitGroup.Wait()
 	err = hasher.generateWalkError()
 
-	return convertSyncMapToResultMap(&outMap), err
+	return makePathHashesFromSyncMap(&outMap), err
 }
 
 // spawnWorkers spawns all workers needed for hashing
@@ -185,21 +185,6 @@ func (hasher *ParallelWalkHasher) generateWalkError() (err error) {
 	}
 
 	return
-}
-
-// convertSyncMapToResultMap takes a syncMap and converts it to a result of parallel
-func convertSyncMapToResultMap(syncMap *sync.Map) map[string]hash.Hash {
-	resultMap := make(map[string]hash.Hash)
-	syncMap.Range(func(key, value interface{}) bool {
-		// We should panic if these values aren't the correct type - there is no way we can produce a result that is correct
-		keyStr := key.(string)
-		valueHash := value.(hash.Hash)
-		resultMap[keyStr] = valueHash
-
-		return true
-	})
-
-	return resultMap
 }
 
 // mergeResultChannels will merge all channels of hashResult into a single channel

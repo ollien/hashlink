@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
-	"hash"
 	"os"
 
 	"github.com/ollien/hashlink"
@@ -49,7 +48,7 @@ func Usage() {
 	flag.PrintDefaults()
 }
 
-func printResults(hashes map[string]hash.Hash) {
+func printResults(hashes hashlink.PathHashes) {
 	buffer := make([]byte, 0)
 	for path, hash := range hashes {
 		sum := hash.Sum(buffer)

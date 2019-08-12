@@ -29,8 +29,8 @@ func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash) *Seri
 }
 
 // WalkAndHash walks the given path and returns hashes for all the files in the path
-func (hasher SerialWalkHasher) WalkAndHash(root string) (map[string]hash.Hash, error) {
-	walkedMap := make(map[string]hash.Hash)
+func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
+	walkedMap := make(PathHashes)
 	// Walk all of the files and collect hashes for them
 	err := hasher.walker.Walk(root, func(reader pathedData) error {
 		defer reader.data.Close()
