@@ -25,6 +25,10 @@ type fileWalker struct{}
 // Walk acts as a simple wrapper for filepath.Walk, only processing regular files
 func (walker fileWalker) Walk(path string, process func(reader pathedData) error) error {
 	return filepath.Walk(path, func(walkedPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return xerrors.Errorf("could not walk: %w", err)
+		}
+
 		// If we don't have a regular file, continue
 		if !info.Mode().IsRegular() {
 			return nil

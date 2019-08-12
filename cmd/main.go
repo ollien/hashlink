@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ollien/hashlink"
+	"github.com/ollien/hashlink/multierror"
 	"github.com/ollien/xtrace"
 )
 
@@ -20,15 +21,14 @@ func main() {
 	if flag.NArg() != 1 {
 		Usage()
 		os.Exit(1)
-	}
-
-	if numWorkers <= 0 {
+	} else if numWorkers <= 0 {
 		fmt.Fprintln(os.Stderr, "Invalid number of workers")
 		Usage()
 		os.Exit(1)
 	}
 
 	srcDir := flag.Arg(0)
+	// If we only have one worker, there's no point in spinning up a parallel hash walker.
 	var hasher hashlink.WalkHasher = hashlink.NewSerialWalkHasher(sha256.New)
 	if numWorkers >= 1 {
 		hasher = hashlink.NewParallelWalkHasher(numWorkers, sha256.New)
@@ -36,9 +36,19 @@ func main() {
 
 	hashes, err := hasher.WalkAndHash(srcDir)
 	if err != nil {
-		xtrace.Trace(err)
+		// Some hash walkers make use of MultiErrors, so we should try to unpack those first if we can.
+		multiErr, isMulti := err.(*multierror.MultiError)
+		if isMulti {
+			for _, singleError := range multiErr.Errors() {
+				xtrace.Trace(singleError)
+			}
+		} else {
+			xtrace.Trace(err)
+		}
+
 		os.Exit(1)
 	}
+
 	printResults(hashes)
 }
 

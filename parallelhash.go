@@ -2,10 +2,10 @@ package hashlink
 
 import (
 	"context"
-	"errors"
 	"hash"
 	"sync"
 
+	"github.com/ollien/hashlink/multierror"
 	"golang.org/x/xerrors"
 )
 
@@ -14,8 +14,7 @@ type ParallelWalkHasher struct {
 	constructor func() hash.Hash
 	walker      pathWalker
 	numWorkers  int
-	errors      []error
-	errorLock   sync.RWMutex
+	errors      *multierror.MultiError
 }
 
 // hashResult represents the result of a hashing operation.
@@ -61,15 +60,15 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	outMap := sync.Map{}
 	collectWaitGroup := sync.WaitGroup{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	go hasher.collectResults(ctx, cancelFunc, &collectWaitGroup, channels, &outMap)
+	go hasher.collectResults(cancelFunc, &collectWaitGroup, channels, &outMap)
 
 	workerWaitGroup := sync.WaitGroup{}
 	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
 	err := hasher.walker.Walk(root, func(reader pathedData) error {
+		// Send some work, but we may need to bail out early if the context has been cancelled.
 		select {
 		case channels.workChan <- reader:
 		case <-ctx.Done():
-			return errors.New("one of the workers experienced an error - work could not be sent")
 		}
 
 		return nil
@@ -83,9 +82,8 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 
 	workerWaitGroup.Wait()
 	collectWaitGroup.Wait()
-	err = hasher.generateWalkError()
 
-	return makePathHashesFromSyncMap(&outMap), err
+	return makePathHashesFromSyncMap(&outMap), hasher.errors
 }
 
 // spawnWorkers spawns all workers needed for hashing
@@ -141,50 +139,31 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels paral
 }
 
 // collectResults collects all of the results from workers
-func (hasher *ParallelWalkHasher) collectResults(ctx context.Context, cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
+func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
 	waitGroup.Add(1)
 	defer waitGroup.Done()
 
-	for {
-		select {
-		case result, ok := <-channels.resultChan:
-			// If we have no more values to recieve, then we're done.
-			if !ok {
-				return
-			} else if result.err != nil {
-				// If we've received an erorr, we should store it and move on.
-				hasher.errorLock.Lock()
-				hasher.errors = append(hasher.errors, result.err)
-				hasher.errorLock.Unlock()
-				continue
-			}
-
-			outMap.Store(result.path, result.hash)
-		case <-ctx.Done():
-			return
+	for result := range channels.resultChan {
+		// If we've received an error, we should store it and move on.
+		// We will cancel the context, but there are still workers that may want to finish up.
+		if result.err != nil {
+			hasher.addError(result.err)
+			cancelFunc()
+			continue
 		}
+
+		outMap.Store(result.path, result.hash)
 	}
 }
 
-// Errors will return all errors that occured during walking.
-func (hasher *ParallelWalkHasher) Errors() []error {
-	errorsCopy := make([]error, len(hasher.errors))
-	hasher.errorLock.RLock()
-	defer hasher.errorLock.RUnlock()
-	copy(errorsCopy, hasher.errors)
-
-	return errorsCopy
-}
-
-// generateWalkErrors generates an error if any have occured during the hashing process
-func (hasher *ParallelWalkHasher) generateWalkError() (err error) {
-	hasher.errorLock.RLock()
-	defer hasher.errorLock.RUnlock()
-	if len(hasher.errors) > 0 {
-		err = errors.New("errors occured during hashing; check .Errors()")
+// addError will setup the MultiError if needed, and append an error to it.
+func (hasher *ParallelWalkHasher) addError(err error) {
+	if hasher.errors == nil {
+		hasher.errors = multierror.NewMultiError(err)
+		return
 	}
 
-	return
+	hasher.errors.Append(err)
 }
 
 // mergeResultChannels will merge all channels of hashResult into a single channel
