@@ -13,9 +13,7 @@ import (
 
 func main() {
 	var numWorkers int
-	flag.Usage = func() {
-
-	}
+	flag.Usage = Usage
 	flag.IntVar(&numWorkers, "j", 1, "specify a number of workers")
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -54,7 +52,7 @@ func main() {
 
 // Usage specifies the usage for the cmd package
 func Usage() {
-	fmt.Fprintln(os.Stderr, "Usage: ./hashlink src_dir")
+	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] src_dir")
 	flag.PrintDefaults()
 }
 
