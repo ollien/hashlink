@@ -51,7 +51,8 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
 func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
-	// the work chan may have been closed from a previous run, so we should make a new one
+	// Reset the errors from the last run
+	hasher.errors = nil
 	channels := parallelWalkHasherChannelSet{
 		workChan:   make(chan pathedData),
 		resultChan: make(chan hashResult),
