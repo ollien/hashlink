@@ -82,8 +82,13 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 
 	workerWaitGroup.Wait()
 	collectWaitGroup.Wait()
+	// Avoid issues with typed nils being returned
+	retErr := error(nil)
+	if hasher.errors != nil && len(hasher.errors.Errors()) > 0 {
+		retErr = hasher.errors
+	}
 
-	return makePathHashesFromSyncMap(&outMap), hasher.errors
+	return makePathHashesFromSyncMap(&outMap), retErr
 }
 
 // spawnWorkers spawns all workers needed for hashing
