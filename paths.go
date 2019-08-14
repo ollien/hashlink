@@ -25,6 +25,19 @@ func FindIdenticalFiles(hashes PathHashes, other PathHashes) FileMap {
 	return res
 }
 
+// GetUnmappedFiles returns all files that are in hashes but not files.
+func GetUnmappedFiles(hashes PathHashes, files FileMap) []string {
+	intersection := []string{}
+	for path := range hashes {
+		_, ok := files[path]
+		if !ok {
+			intersection = append(intersection, path)
+		}
+	}
+
+	return intersection
+}
+
 // mapHashesToPaths will flip the map, and bucket all non-unique hashes into one key, where the keys are string digests
 // of the hash hash.Hashes are not compariable on their own, thus we need to encode them.
 func mapHashesToPaths(hashes PathHashes) map[string][]string {

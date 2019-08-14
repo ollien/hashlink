@@ -127,3 +127,88 @@ func TestFindIdenticalFiles(t *testing.T) {
 	}
 	runPathTestTable(t, tests)
 }
+
+func TestGetUnmappedFiles(t *testing.T) {
+	tests := []pathTest{
+		pathTest{
+			name: "no files",
+			test: func(t *testing.T) {
+				hashes := PathHashes{}
+				files := FileMap{}
+				unmappedFiles := GetUnmappedFiles(hashes, files)
+				assert.Equal(t, []string{}, unmappedFiles)
+			},
+		},
+		pathTest{
+			name: "only hash files",
+			test: func(t *testing.T) {
+				hash1 := sha256.New()
+				hash1.Write([]byte("pls"))
+				hash2 := sha256.New()
+				hash2.Write([]byte("I don't matter"))
+				hashes := PathHashes{
+					"a/b": hash1,
+					"b/c": hash2,
+				}
+
+				files := FileMap{}
+				unmappedFiles := GetUnmappedFiles(hashes, files)
+				assert.ElementsMatch(t, []string{"a/b", "b/c"}, unmappedFiles)
+			},
+		},
+		pathTest{
+			name: "only mapped files",
+			test: func(t *testing.T) {
+				hashes := PathHashes{}
+				files := FileMap{
+					"a/b": []string{"something"},
+					"b/c": []string{"somethingelse"},
+				}
+
+				unmappedFiles := GetUnmappedFiles(hashes, files)
+				assert.ElementsMatch(t, []string{}, unmappedFiles)
+			},
+		},
+		pathTest{
+			name: "full intersection",
+			test: func(t *testing.T) {
+				hash1 := sha256.New()
+				hash1.Write([]byte("pls"))
+				hash2 := sha256.New()
+				hash2.Write([]byte("I don't matter"))
+				hashes := PathHashes{
+					"a/b": hash1,
+					"b/c": hash2,
+				}
+				files := FileMap{
+					"a/b": []string{"something"},
+					"b/c": []string{"somethingelse"},
+				}
+
+				unmappedFiles := GetUnmappedFiles(hashes, files)
+				assert.ElementsMatch(t, []string{}, unmappedFiles)
+			},
+		},
+		pathTest{
+			name: "partial intersection",
+			test: func(t *testing.T) {
+				hash1 := sha256.New()
+				hash1.Write([]byte("pls"))
+				hash2 := sha256.New()
+				hash2.Write([]byte("I don't matter"))
+				hashes := PathHashes{
+					"a/b": hash1,
+					"b/c": hash2,
+				}
+				files := FileMap{
+					"a/b": []string{"something"},
+				}
+
+				unmappedFiles := GetUnmappedFiles(hashes, files)
+				assert.ElementsMatch(t, []string{"b/c"}, unmappedFiles)
+			},
+		},
+	}
+
+	runPathTestTable(t, tests)
+}
