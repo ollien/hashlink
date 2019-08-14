@@ -16,7 +16,7 @@ func main() {
 	flag.Usage = Usage
 	flag.IntVar(&numWorkers, "j", 1, "specify a number of workers")
 	flag.Parse()
-	if flag.NArg() != 1 {
+	if flag.NArg() != 2 {
 		Usage()
 		os.Exit(1)
 	} else if numWorkers <= 0 {
@@ -26,40 +26,49 @@ func main() {
 	}
 
 	srcDir := flag.Arg(0)
+	referenceDir := flag.Arg(1)
 	// If we only have one worker, there's no point in spinning up a parallel hash walker.
 	var hasher hashlink.WalkHasher = hashlink.NewSerialWalkHasher(sha256.New)
 	if numWorkers >= 1 {
 		hasher = hashlink.NewParallelWalkHasher(numWorkers, sha256.New)
 	}
 
-	hashes, err := hasher.WalkAndHash(srcDir)
+	srcHashes, err := hasher.WalkAndHash(srcDir)
 	if err != nil {
 		// Some hash walkers make use of MultiErrors, so we should try to unpack those first if we can.
-		multiErr, isMulti := err.(*multierror.MultiError)
-		if isMulti {
-			for _, singleError := range multiErr.Errors() {
-				xtrace.Trace(singleError)
-			}
-		} else {
-			xtrace.Trace(err)
-		}
-
+		handleMultiError(err)
 		os.Exit(1)
 	}
 
-	printResults(hashes)
+	referenceHashes, err := hasher.WalkAndHash(referenceDir)
+	if err != nil {
+		handleMultiError(err)
+		os.Exit(1)
+	}
+
+	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
+	printResults(identicalFiles)
 }
 
 // Usage specifies the usage for the cmd package
 func Usage() {
-	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] src_dir")
+	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] src_dir reference_dir")
 	flag.PrintDefaults()
 }
 
-func printResults(hashes hashlink.PathHashes) {
-	buffer := make([]byte, 0)
-	for path, hash := range hashes {
-		sum := hash.Sum(buffer)
-		fmt.Printf("%s => %x\n", path, sum)
+func printResults(fileMap hashlink.FileMap) {
+	for path, matchingFiles := range fileMap {
+		fmt.Printf("%s => %v\n", path, matchingFiles)
+	}
+}
+
+func handleMultiError(err error) {
+	multiErr, isMulti := err.(*multierror.MultiError)
+	if isMulti {
+		for _, singleError := range multiErr.Errors() {
+			xtrace.Trace(singleError)
+		}
+	} else {
+		xtrace.Trace(err)
 	}
 }
