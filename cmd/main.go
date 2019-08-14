@@ -29,7 +29,7 @@ func main() {
 	referenceDir := flag.Arg(1)
 	// If we only have one worker, there's no point in spinning up a parallel hash walker.
 	var hasher hashlink.WalkHasher = hashlink.NewSerialWalkHasher(sha256.New)
-	if numWorkers >= 1 {
+	if numWorkers > 1 {
 		hasher = hashlink.NewParallelWalkHasher(numWorkers, sha256.New)
 	}
 
