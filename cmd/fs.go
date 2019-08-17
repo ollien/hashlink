@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -64,4 +65,38 @@ func ensureContainingDirsArePresent(filePath string) error {
 	}
 
 	return nil
+}
+
+// copyFile copies a file from src to dst. Both paths must be regular files.
+// (for some reason the standard library includes no way to do this out of the box...)
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return xerrors.Errorf("could not open %s for copying: %w", srcFile, err)
+	}
+
+	dstFile, err := os.Open(dst)
+	fileMissing := os.IsNotExist(err)
+	if err != nil && !fileMissing {
+		return xerrors.Errorf("could not open %s as copying destination: %w", dstFile, err)
+	} else if fileMissing {
+		dstFile, err = os.Create(dst)
+		if err != nil {
+			return xerrors.Errorf("could not create %s as copying destination: %w", dstFile, err)
+		}
+	}
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return xerrors.Errorf("could noy copy %s to %s: %w", srcFile)
+	}
+
+	return nil
+}
+
+// removeExecuteBits will remove the execute bits from the given FileMode
+func removeExecuteBits(mode os.FileMode) os.FileMode {
+	mask := ^os.FileMode(0111)
+
+	return mode & mask
 }

@@ -22,6 +22,7 @@ var (
 // cliArgs rpresents the arguments that can be passed to the entrypoint command
 type cliArgs struct {
 	dryRun       bool
+	copyMissing  bool
 	numWorkers   int
 	srcDir       string
 	referenceDir string
@@ -55,13 +56,13 @@ func main() {
 	missingFiles := findMissingFiles(srcHashes, referenceHashes, identicalFiles)
 	fmt.Print("Done scanning.")
 	if len(missingFiles) > 0 {
-		missingFilesOutput, err := makeJSONEncodedStringSlice(missingFiles)
+		missingFilesOutput, err := makeIndentedJSONOutput(missingFiles)
 		if err != nil {
 			err = xerrors.Errorf("could not generate missing file output: %w", err)
 			handleError(err)
 		}
 
-		fmt.Printf("The following files will not be processed.\n%v\n", missingFilesOutput)
+		fmt.Printf("The following files will not be linked.\n%v\n", missingFilesOutput)
 	} else {
 		fmt.Print("\n")
 	}
@@ -73,9 +74,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	output := "Done linking. Enjoy your files :)"
+	op = getConnectFunction(args.dryRun, copyFile)
+	err = connectFiles(identicalFiles, args.srcDir, args.outDir, op)
+
+	output := "Done processing. Enjoy your files :)"
 	if args.dryRun {
-		output = getDryRunOutput(identicalFiles)
+		copiedFiles := []string{}
+		if args.copyMissing {
+			copiedFiles = missingFiles
+		}
+
+		output = getDryRunOutput(identicalFiles, copiedFiles)
 	}
 
 	fmt.Println(output)
@@ -83,7 +92,7 @@ func main() {
 
 // Usage specifies the usage for the cmd package
 func Usage() {
-	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] [-n] src_dir reference_dir out_dir")
+	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] [-n] [-c] src_dir reference_dir out_dir")
 	flag.PrintDefaults()
 }
 
@@ -92,6 +101,7 @@ func setupAndValidateArgs() (cliArgs, error) {
 	flag.Usage = Usage
 	flag.IntVar(&args.numWorkers, "j", 1, "specify a number of workers")
 	flag.BoolVar(&args.dryRun, "n", false, "do not link any files, but print out what files would have been linked")
+	flag.BoolVar(&args.copyMissing, "c", false, "copy the files that are missing from either src_dir or reference_dir")
 	flag.Parse()
 	if flag.NArg() != 3 {
 		return cliArgs{}, errWrongNumberOfArguments
@@ -179,15 +189,20 @@ func assertDirsExist(dirs ...string) error {
 }
 
 // getDryRunOutput gets the output for the termination of the program when the dryRun flag is provided.
-func getDryRunOutput(identicalFiles hashlink.FileMap) string {
-	srcFiles := make([]string, len(identicalFiles))
+func getDryRunOutput(identicalFiles hashlink.FileMap, copiedFiles []string) string {
+	type output struct {
+		Linked []string `json:"linked"`
+		Copied []string `json:"copied,omitempty"`
+	}
+
+	linkedFiles := make([]string, len(identicalFiles))
 	i := 0
 	for file := range identicalFiles {
-		srcFiles[i] = file
+		linkedFiles[i] = file
 		i++
 	}
 
-	out, err := makeJSONEncodedStringSlice(srcFiles)
+	out, err := makeIndentedJSONOutput(output{Linked: linkedFiles, Copied: copiedFiles})
 	if err != nil {
 		handleError(err)
 		os.Exit(1)
@@ -196,9 +211,9 @@ func getDryRunOutput(identicalFiles hashlink.FileMap) string {
 	return out
 }
 
-// makeJSONEncodedStringSlice makes a JSON formatted string of the given string slice
-func makeJSONEncodedStringSlice(s []string) (string, error) {
-	out, err := json.MarshalIndent(s, "", "\t")
+// makeIndentedJSONOutput makes a JSON formatted string of the given item
+func makeIndentedJSONOutput(target interface{}) (string, error) {
+	out, err := json.MarshalIndent(target, "", "\t")
 
 	return string(out), err
 }
