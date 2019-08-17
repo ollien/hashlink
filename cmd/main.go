@@ -52,9 +52,7 @@ func main() {
 
 	// Create a mapping of reference files to src files
 	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
-	// To get missing files, we must make our map in order of reference => src
-	flippedIdenticalFiles := hashlink.MakeFlippedFileMap(identicalFiles)
-	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, flippedIdenticalFiles)
+	missingFiles := findMissingFiles(srcHashes, referenceHashes, identicalFiles)
 	fmt.Print("Done scanning.")
 	if len(missingFiles) > 0 {
 		missingFilesOutput, err := makeJSONEncodedStringSlice(missingFiles)
@@ -203,4 +201,16 @@ func makeJSONEncodedStringSlice(s []string) (string, error) {
 	out, err := json.MarshalIndent(s, "", "\t")
 
 	return string(out), err
+}
+
+// findMissingFiles will find all files missing in files that are in present in srcHashes or referenceHashes
+// files is expected to have files from srcDir as the keys, and referenceDir as the values
+func findMissingFiles(srcHashes, referenceHashes hashlink.PathHashes, files hashlink.FileMap) []string {
+	// To get missing files for the refernce dir, we must make our map in order of reference => src
+	flippedFiles := hashlink.MakeFlippedFileMap(files)
+	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, flippedFiles)
+	missingSrcFiles := hashlink.GetUnmappedFiles(srcHashes, files)
+	missingFiles = append(missingFiles, missingSrcFiles...)
+
+	return missingFiles
 }
