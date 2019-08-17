@@ -51,8 +51,10 @@ func main() {
 	}
 
 	// Create a mapping of reference files to src files
-	identicalFiles := hashlink.FindIdenticalFiles(referenceHashes, srcHashes)
-	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, identicalFiles)
+	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
+	// To get missing files, we must make our map in order of reference => src
+	flippedIdenticalFiles := hashlink.MakeFlippedFileMap(identicalFiles)
+	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, flippedIdenticalFiles)
 	fmt.Print("Done scanning.")
 	if len(missingFiles) > 0 {
 		fmt.Printf("The following files will not be processed.\n%v\n", missingFiles)

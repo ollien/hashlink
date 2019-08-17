@@ -14,14 +14,11 @@ import (
 // If the file does not exist in srcDir, no link will be created an error will be returned for that file.
 func linkFiles(files hashlink.FileMap, srcDir, outDir string) error {
 	errors := multierror.NewMultiError()
-	for _, identicalFiles := range files {
-		// TODO: This is a hack - we should implement a flip for FileMap
-		for _, file := range identicalFiles {
-			err := linkFile(file, srcDir, outDir)
-			if err != nil {
-				err = xerrors.Errorf("could not link file: %w", err)
-				errors.Append(err)
-			}
+	for file := range files {
+		err := linkFile(file, srcDir, outDir)
+		if err != nil {
+			err = xerrors.Errorf("could not link file: %w", err)
+			errors.Append(err)
 		}
 	}
 
