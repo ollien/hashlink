@@ -10,6 +10,7 @@ import (
 	"github.com/ollien/hashlink"
 	"github.com/ollien/hashlink/multierror"
 	"github.com/ollien/xtrace"
+	"golang.org/x/xerrors"
 )
 
 const defaultFileMode os.FileMode = 0755
@@ -29,6 +30,11 @@ type cliArgs struct {
 
 func main() {
 	args, err := setupAndValidateArgs()
+	if err != nil {
+		handleMultiError(err)
+		os.Exit(1)
+	}
+
 	hasher := getWalkHasher(args.numWorkers)
 
 	srcHashes, err := hasher.WalkAndHash(args.srcDir)
@@ -83,9 +89,9 @@ func setupAndValidateArgs() (cliArgs, error) {
 	args.srcDir = flag.Arg(0)
 	args.referenceDir = flag.Arg(1)
 	args.outDir = flag.Arg(2)
-	// TODO: Validate these are directories and existant
+	err := assertDirsExist(args.srcDir, args.referenceDir, args.outDir)
 
-	return args, nil
+	return args, err
 }
 
 func handleArgsError(err error) {
@@ -121,4 +127,29 @@ func getWalkHasher(numWorkers int) hashlink.WalkHasher {
 	}
 
 	return hashlink.NewSerialWalkHasher(sha256.New)
+}
+
+// assertDirsExist will return true if all of the paths in the values of the map exist.
+// The keys of the map should map to the name of the directory to be put into the error
+func assertDirsExist(dirs ...string) error {
+	errors := multierror.NewMultiError()
+	for _, dir := range dirs {
+		fileInfo, err := os.Stat(dir)
+		if err != nil && os.IsNotExist(err) {
+			err = fmt.Errorf("%s does not exist", dir)
+			errors.Append(err)
+		} else if err != nil {
+			err = xerrors.Errorf("failed to get file info about %s: %w", dir, err)
+			errors.Append(err)
+		} else if !fileInfo.IsDir() {
+			err := fmt.Errorf("%s is not a directory", dir)
+			errors.Append(err)
+		}
+	}
+
+	if errors.Len() > 0 {
+		return errors
+	}
+
+	return nil
 }
