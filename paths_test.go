@@ -212,3 +212,57 @@ func TestGetUnmappedFiles(t *testing.T) {
 
 	runPathTestTable(t, tests)
 }
+
+func TestMakeFlippedMap(t *testing.T) {
+	tests := []pathTest{
+		pathTest{
+			name: "no files",
+			test: func(t *testing.T) {
+				files := FileMap{}
+				flipped := MakeFlippedMap(files)
+				assert.Equal(t, FileMap{}, flipped)
+			},
+		},
+		pathTest{
+			name: "unique files",
+			test: func(t *testing.T) {
+				files := FileMap{
+					"a/b": []string{"b/c"},
+					"d/e": []string{"f/g", "h/i"},
+				}
+				flipped := MakeFlippedMap(files)
+				expected := FileMap{
+					"b/c": []string{"a/b"},
+					"f/g": []string{"d/e"},
+					"h/i": []string{"d/e"},
+				}
+
+				for key := range expected {
+					assert.ElementsMatch(t, expected[key], flipped[key])
+				}
+			},
+		},
+		pathTest{
+			name: "non-unique files",
+			test: func(t *testing.T) {
+				files := FileMap{
+					"a/b": []string{"b/c"},
+					"d/e": []string{"b/c", "g/h"},
+				}
+
+				flipped := MakeFlippedMap(files)
+				expected := FileMap{
+					"b/c": []string{"a/b", "d/e"},
+					"g/h": []string{"d/e"},
+				}
+
+				for key := range expected {
+					assert.Contains(t, flipped, key)
+					assert.ElementsMatch(t, expected[key], flipped[key])
+				}
+			},
+		},
+	}
+
+	runPathTestTable(t, tests)
+}

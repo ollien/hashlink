@@ -38,6 +38,18 @@ func GetUnmappedFiles(hashes PathHashes, files FileMap) []string {
 	return unmappedFiles
 }
 
+// MakeFlippedFileMap takes an existing map and makes all of the files in the value portion
+func MakeFlippedFileMap(files FileMap) FileMap {
+	outMap := FileMap{}
+	for path, relatedPaths := range files {
+		for _, relatedPath := range relatedPaths {
+			outMap[relatedPath] = append(outMap[relatedPath], path)
+		}
+	}
+
+	return outMap
+}
+
 // mapHashesToPaths will flip the map, and bucket all non-unique hashes into one key, where the keys are string digests
 // of the hash hash.Hashes are not compariable on their own, thus we need to encode them.
 func mapHashesToPaths(hashes PathHashes) map[string][]string {
