@@ -59,3 +59,11 @@ func (multiError *MultiError) Errors() []error {
 
 	return copiedErrors
 }
+
+// Len will return the number of errors currently contained within the MultiError
+func (multiError *MultiError) Len() int {
+	multiError.errorLock.RLock()
+	defer multiError.errorLock.RUnlock()
+
+	return len(multiError.errors)
+}

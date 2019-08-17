@@ -91,9 +91,9 @@ func TestMultiError_Append(t *testing.T) {
 				return NewMultiError()
 			},
 			test: func(t *testing.T, multiError *MultiError) {
-				assert.Equal(t, 0, len(multiError.Errors()))
+				assert.Equal(t, 0, multiError.Len())
 				multiError.Append(error(nil))
-				assert.Equal(t, 0, len(multiError.Errors()))
+				assert.Equal(t, 0, multiError.Len())
 			},
 		},
 	}

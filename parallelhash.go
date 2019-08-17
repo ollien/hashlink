@@ -85,7 +85,7 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	collectWaitGroup.Wait()
 	// Avoid issues with typed nils being returned
 	retErr := error(nil)
-	if hasher.errors != nil && len(hasher.errors.Errors()) > 0 {
+	if hasher.errors != nil && hasher.errors.Len() > 0 {
 		retErr = hasher.errors
 	}
 
