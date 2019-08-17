@@ -75,15 +75,10 @@ func copyFile(src, dst string) error {
 		return xerrors.Errorf("could not open %s for copying: %w", srcFile, err)
 	}
 
-	dstFile, err := os.Open(dst)
-	fileMissing := os.IsNotExist(err)
-	if err != nil && !fileMissing {
+	createMode := removeExecuteBits(defaultFileMode)
+	dstFile, err := os.OpenFile(dst, os.O_RDONLY|os.O_CREATE, createMode)
+	if err != nil {
 		return xerrors.Errorf("could not open %s as copying destination: %w", dstFile, err)
-	} else if fileMissing {
-		dstFile, err = os.Create(dst)
-		if err != nil {
-			return xerrors.Errorf("could not create %s as copying destination: %w", dstFile, err)
-		}
 	}
 
 	_, err = io.Copy(dstFile, srcFile)
