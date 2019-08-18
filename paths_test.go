@@ -213,13 +213,13 @@ func TestGetUnmappedFiles(t *testing.T) {
 	runPathTestTable(t, tests)
 }
 
-func TestMakeFlippedMap(t *testing.T) {
+func TestMakeFlippedFileMap(t *testing.T) {
 	tests := []pathTest{
 		pathTest{
 			name: "no files",
 			test: func(t *testing.T) {
 				files := FileMap{}
-				flipped := MakeFlippedMap(files)
+				flipped := MakeFlippedFileMap(files)
 				assert.Equal(t, FileMap{}, flipped)
 			},
 		},
@@ -230,7 +230,7 @@ func TestMakeFlippedMap(t *testing.T) {
 					"a/b": []string{"b/c"},
 					"d/e": []string{"f/g", "h/i"},
 				}
-				flipped := MakeFlippedMap(files)
+				flipped := MakeFlippedFileMap(files)
 				expected := FileMap{
 					"b/c": []string{"a/b"},
 					"f/g": []string{"d/e"},
@@ -250,7 +250,7 @@ func TestMakeFlippedMap(t *testing.T) {
 					"d/e": []string{"b/c", "g/h"},
 				}
 
-				flipped := MakeFlippedMap(files)
+				flipped := MakeFlippedFileMap(files)
 				expected := FileMap{
 					"b/c": []string{"a/b", "d/e"},
 					"g/h": []string{"d/e"},
