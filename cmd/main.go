@@ -38,27 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	reporter := progressBarReporter{}
-	hasher := getWalkHasher(args.numWorkers, reporter)
-
-	fmt.Println("Hashing src_dir files...")
-	srcHashes, err := hasher.WalkAndHash(args.srcDir)
+	srcHashes, referenceHashes, err := getHashes(args.srcDir, args.referenceDir, args.numWorkers)
 	if err != nil {
-		reporter.abort()
 		handleError(err)
 		os.Exit(1)
 	}
 
-	reporter.finish()
-	fmt.Println("Hashing reference_dir files...")
-	referenceHashes, err := hasher.WalkAndHash(args.referenceDir)
-	if err != nil {
-		reporter.abort()
-		handleError(err)
-		os.Exit(1)
-	}
-
-	reporter.finish()
 	// Create a mapping of reference files to src files
 	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
 	missingFiles := findMissingFiles(srcHashes, referenceHashes, identicalFiles)
@@ -160,16 +145,6 @@ func handleError(err error) {
 	}
 }
 
-// getWalkHasher gets the approrpiate WalkHasher based on the number of workers
-func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.WalkHasher {
-	// If we only have one worker, there's no point in spinning up a parallel hash walker.
-	if numWorkers > 1 {
-		return hashlink.NewParallelWalkHasher(numWorkers, sha256.New, hashlink.ParallelWalkHasherProgressReporter(reporter))
-	}
-
-	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
-}
-
 // getConnectFunction gives a nop function if dryRun is try, the fallback otherwise.
 func getConnectFunction(dryRun bool, fallback connectFunction) connectFunction {
 	if dryRun {
@@ -247,6 +222,41 @@ func makeIndentedJSONOutput(target interface{}) (string, error) {
 	out, err := json.MarshalIndent(target, "", "\t")
 
 	return string(out), err
+}
+
+// getWalkHasher gets the approrpiate WalkHasher based on the number of workers
+func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.WalkHasher {
+	// If we only have one worker, there's no point in spinning up a parallel hash walker.
+	if numWorkers > 1 {
+		return hashlink.NewParallelWalkHasher(numWorkers, sha256.New, hashlink.ParallelWalkHasherProgressReporter(reporter))
+	}
+
+	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
+}
+
+// getHashes will get all of the hashes needed from the given directories
+func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.PathHashes, referenceHashes hashlink.PathHashes, err error) {
+	reporter := progressBarReporter{}
+	hasher := getWalkHasher(numWorkers, reporter)
+
+	fmt.Println("Hashing src_dir files...")
+	srcHashes, err = hasher.WalkAndHash(srcDir)
+	if err != nil {
+		reporter.abort()
+		return nil, nil, err
+	}
+
+	reporter.finish()
+	fmt.Println("Hashing reference_dir files...")
+	referenceHashes, err = hasher.WalkAndHash(referenceDir)
+	if err != nil {
+		reporter.abort()
+		return nil, nil, err
+	}
+
+	reporter.finish()
+
+	return srcHashes, referenceHashes, nil
 }
 
 // findMissingFiles will find all files missing in files that are in present in srcHashes or referenceHashes
