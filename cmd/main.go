@@ -126,7 +126,7 @@ func setupAndValidateArgs() (cliArgs, error) {
 	}
 
 	err = assertDirEmpty(args.outDir)
-	if err != nil {
+	if !args.dryRun && err != nil {
 		return args, err
 	}
 
