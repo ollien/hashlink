@@ -43,12 +43,12 @@ func (walker fileWalker) Walk(path string, process func(reader pathedData) error
 	})
 }
 
-func getAllItemsFromWalker(walker pathWalker, path string) ([]string, error) {
-	result := make([]string, 0)
+func getAllItemsFromWalker(walker pathWalker, path string) ([]pathedData, error) {
+	result := make([]pathedData, 0)
 	err := walker.Walk(path, func(reader pathedData) error {
-		result = append(result, reader.path)
+		result = append(result, reader)
 
-		return reader.data.Close()
+		return nil
 	})
 
 	return result, err

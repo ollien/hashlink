@@ -59,7 +59,7 @@ func runWalkTestTable(t *testing.T, table []walkTest) {
 	}
 }
 
-func TestGetAllItemsFromwalker(t *testing.T) {
+func TestGetAllItemsFromWalker(t *testing.T) {
 	tests := []walkTest{
 		walkTest{
 			name: "no files",
@@ -90,11 +90,12 @@ func TestGetAllItemsFromwalker(t *testing.T) {
 			test: func(t *testing.T, walker pathWalker) {
 				result, err := getAllItemsFromWalker(walker, "/")
 				assert.Nil(t, err)
-				assert.ElementsMatch(t, []string{"a/b", "a/bb/c", "a/bb/d", "a/bb/e"}, result)
-				// Assert that every file has been closed exactly once.
-				for filename, reader := range walker.(staticWalker).readers {
-					assert.Equal(t, 1, reader.closeCount, "file="+filename)
+				paths := []string{}
+				for _, data := range result {
+					paths = append(paths, data.path)
 				}
+
+				assert.ElementsMatch(t, []string{"a/b", "a/bb/c", "a/bb/d", "a/bb/e"}, paths)
 			},
 		},
 	}
