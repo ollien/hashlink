@@ -4,7 +4,6 @@ import (
 	"errors"
 	"hash"
 	"io"
-	"sync"
 
 	"golang.org/x/xerrors"
 )
@@ -29,19 +28,4 @@ func hashReader(h hash.Hash, reader io.Reader) (retErr error) {
 	}
 
 	return
-}
-
-// convertSyncMapToResultMap takes a syncMap and converts it to a result of parallel
-func makePathHashesFromSyncMap(syncMap *sync.Map) PathHashes {
-	resultMap := make(PathHashes)
-	syncMap.Range(func(key, value interface{}) bool {
-		// We should panic if these values aren't the correct type - there is no way we can produce a result that is correct
-		keyStr := key.(string)
-		valueHash := value.(hash.Hash)
-		resultMap[keyStr] = valueHash
-
-		return true
-	})
-
-	return resultMap
 }

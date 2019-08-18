@@ -27,13 +27,6 @@ type hashResult struct {
 	err error
 }
 
-type parallelWalkHasherChannelSet struct {
-	// all io.Readers to hash will be sent to the workers through workChan
-	workChan chan pathedData
-	// all resulting hashes will be sent from the workers through resultChan
-	resultChan chan hashResult
-}
-
 // ParallelWalkHasherProgressReporter will provide a ProgressReporter for a ParallelWalkWasher.
 // Intended to be passed to NewParallelWalkHasher as an option
 func ParallelWalkHasherProgressReporter(reporter ProgressReporter) func(*ParallelWalkHasher) {
@@ -70,74 +63,67 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	// Reset the errors from the last run
 	// TODO: This is not concurrency safe
 	hasher.errors = nil
-	channels := parallelWalkHasherChannelSet{
-		workChan:   make(chan pathedData),
-		resultChan: make(chan hashResult),
-	}
+	workChan := make(chan pathedData)
+	resultChan := make(chan hashResult)
 
-	outMap := sync.Map{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	collectWaitGroup := sync.WaitGroup{}
-	collectWaitGroup.Add(1)
-	go hasher.collectResults(cancelFunc, &collectWaitGroup, channels, &outMap)
-
-	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
-	if err != nil {
-		return nil, xerrors.Errorf("could not perform parallel hash walk: %w", err)
-	}
+	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan)
 
 	workerWaitGroup := sync.WaitGroup{}
-	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
-	for i, reader := range walkerItems {
-		// Send some work, but we may need to bail out early if the context has been cancelled.
-		select {
-		case channels.workChan <- reader:
-			// Not the _MOST_ accurate, since we're really just reporting when work has been sent, but it's good enough.
-			hasher.progressReporter.ReportProgress(Progress(i * 100 / len(walkerItems)))
-		case <-ctx.Done():
-		}
+	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
+	if err != nil {
+		return nil, xerrors.Errorf("could not perform get items for parallel hash walk: %w", err)
 	}
 
-	close(channels.workChan)
+	hasher.spawnWorkers(ctx, &workerWaitGroup, workChan, resultChan)
+	hasher.dispatchWork(ctx, walkerItems, workChan)
+	close(workChan)
 	workerWaitGroup.Wait()
-	collectWaitGroup.Wait()
+	results := <-collectedResultChannel
 	// Avoid issues with typed nils being returned
 	retErr := error(nil)
 	if hasher.errors != nil && hasher.errors.Len() > 0 {
 		retErr = hasher.errors
 	}
 
-	return makePathHashesFromSyncMap(&outMap), retErr
+	return results, retErr
 }
 
 // spawnWorkers spawns all workers needed for hashing
-func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet) {
+func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *sync.WaitGroup, workChan <-chan pathedData, resultChan chan<- hashResult) {
 	workerChannels := make([]chan hashResult, hasher.numWorkers)
 	for i := 0; i < hasher.numWorkers; i++ {
 		workerChannel := make(chan hashResult)
 		workerChannels[i] = workerChannel
-		// Create a set of channels for this specific worker.
-		workerChannelSet := parallelWalkHasherChannelSet{
-			workChan:   channels.workChan,
-			resultChan: workerChannel,
-		}
-
 		waitGroup.Add(1)
 		go func() {
-			hasher.doHashWork(ctx, workerChannelSet)
+			hasher.doHashWork(ctx, workChan, workerChannel)
 			waitGroup.Done()
 		}()
 	}
 
-	go mergeResultChannels(workerChannels, channels.resultChan)
+	go mergeResultChannels(workerChannels, resultChan)
+}
+
+// dispatchWork will send jobs to all workers through the given workChan
+func (hasher *ParallelWalkHasher) dispatchWork(ctx context.Context, work []pathedData, workChan chan<- pathedData) {
+	for i, job := range work {
+		// Send some work, but we may need to bail out early if the context has been cancelled.
+		select {
+		case workChan <- job:
+			// Not the _MOST_ accurate, since we're really just reporting when work has been sent, but it's good enough.
+			hasher.progressReporter.ReportProgress(Progress(i * 100 / len(work)))
+		case <-ctx.Done():
+		}
+	}
 }
 
 // doHashWork provides all of the coordination needed for workers to process hashes
-func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels parallelWalkHasherChannelSet) {
-	defer close(channels.resultChan)
+func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-chan pathedData, resultChan chan<- hashResult) {
+	defer close(resultChan)
 	for {
 		select {
-		case reader, ok := <-channels.workChan:
+		case reader, ok := <-workChan:
 			// If there's no work left, we're done.
 			if !ok {
 				return
@@ -156,28 +142,35 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels paral
 				err:  err,
 			}
 
-			channels.resultChan <- result
+			resultChan <- result
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-// collectResults collects all of the results from workers
-func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
-	defer waitGroup.Done()
+// collectResults collects all of the results from workers, and will return it on the provided channel when complete.
+func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, resultChan <-chan hashResult) <-chan PathHashes {
+	outChan := make(chan PathHashes)
+	go func() {
+		hashes := make(PathHashes)
+		for result := range resultChan {
+			// If we've received an error, we should store it and move on.
+			// We will cancel the context, but there are still workers that may want to finish up.
+			if result.err != nil {
+				hasher.addError(result.err)
+				cancelFunc()
+				continue
+			}
 
-	for result := range channels.resultChan {
-		// If we've received an error, we should store it and move on.
-		// We will cancel the context, but there are still workers that may want to finish up.
-		if result.err != nil {
-			hasher.addError(result.err)
-			cancelFunc()
-			continue
+			hashes[result.path] = result.hash
 		}
 
-		outMap.Store(result.path, result.hash)
-	}
+		outChan <- hashes
+		close(outChan)
+	}()
+
+	return outChan
 }
 
 // addError will setup the MultiError if needed, and append an error to it.
@@ -191,7 +184,7 @@ func (hasher *ParallelWalkHasher) addError(err error) {
 }
 
 // mergeResultChannels will merge all channels of hashResult into a single channel
-func mergeResultChannels(workerChannels []chan hashResult, outChannel chan hashResult) {
+func mergeResultChannels(workerChannels []chan hashResult, outChannel chan<- hashResult) {
 	waitGroup := sync.WaitGroup{}
 	for _, workerChan := range workerChannels {
 		waitGroup.Add(1)
