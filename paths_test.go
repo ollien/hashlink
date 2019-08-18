@@ -119,9 +119,15 @@ func TestFindIdenticalFiles(t *testing.T) {
 				}
 
 				res := FindIdenticalFiles(hashes, otherHashes)
-				assert.Equal(t, FileMap{
+				// Because this test can return multiple values, we need to use ElementsMatch on each individual slice.
+				expected := FileMap{
 					"a/b": []string{"b/b", "c/c"},
-				}, res)
+				}
+
+				for key, value := range res {
+					assert.Contains(t, expected, key)
+					assert.ElementsMatch(t, expected[key], value)
+				}
 			},
 		},
 	}
