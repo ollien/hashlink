@@ -14,7 +14,6 @@ type ParallelWalkHasher struct {
 	constructor      func() hash.Hash
 	walker           pathWalker
 	numWorkers       int
-	errors           *multierror.MultiError
 	progressReporter ProgressReporter
 }
 
@@ -60,14 +59,13 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
 func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
-	// Reset the errors from the last run
-	// TODO: This is not concurrency safe
-	hasher.errors = nil
 	workChan := make(chan pathedData)
 	resultChan := make(chan hashResult)
+	errorChan := make(chan error)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan)
+	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan, errorChan)
+	collectedErrorChannel := hasher.collectErrors(errorChan)
 
 	workerWaitGroup := sync.WaitGroup{}
 	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
@@ -80,10 +78,11 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	close(workChan)
 	workerWaitGroup.Wait()
 	results := <-collectedResultChannel
-	// Avoid issues with typed nils being returned
+	errors := <-collectedErrorChannel
+
 	retErr := error(nil)
-	if hasher.errors != nil && hasher.errors.Len() > 0 {
-		retErr = hasher.errors
+	if errors.Len() > 0 {
+		retErr = errors
 	}
 
 	return results, retErr
@@ -150,7 +149,7 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-cha
 }
 
 // collectResults collects all of the results from workers, and will return it on the provided channel when complete.
-func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, resultChan <-chan hashResult) <-chan PathHashes {
+func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, resultChan <-chan hashResult, errorChan chan<- error) <-chan PathHashes {
 	outChan := make(chan PathHashes)
 	go func() {
 		hashes := make(PathHashes)
@@ -158,7 +157,7 @@ func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, 
 			// If we've received an error, we should store it and move on.
 			// We will cancel the context, but there are still workers that may want to finish up.
 			if result.err != nil {
-				hasher.addError(result.err)
+				errorChan <- result.err
 				cancelFunc()
 				continue
 			}
@@ -168,19 +167,26 @@ func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, 
 
 		outChan <- hashes
 		close(outChan)
+		// We've collected all results, so we're also done collecting errors.
+		close(errorChan)
 	}()
 
 	return outChan
 }
 
-// addError will setup the MultiError if needed, and append an error to it.
-func (hasher *ParallelWalkHasher) addError(err error) {
-	if hasher.errors == nil {
-		hasher.errors = multierror.NewMultiError(err)
-		return
-	}
+// collectErrors collects all of the errors from errorChan, and will produce one MultiError on the provided channel.
+func (hasher *ParallelWalkHasher) collectErrors(errorChan <-chan error) <-chan *multierror.MultiError {
+	outChan := make(chan *multierror.MultiError)
+	errors := multierror.NewMultiError()
+	go func() {
+		for err := range errorChan {
+			errors.Append(err)
+		}
 
-	hasher.errors.Append(err)
+		outChan <- errors
+	}()
+
+	return outChan
 }
 
 // mergeResultChannels will merge all channels of hashResult into a single channel
