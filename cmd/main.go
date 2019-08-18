@@ -36,16 +36,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	hasher := getWalkHasher(args.numWorkers)
+	reporter := progressBarReporter{}
+	hasher := getWalkHasher(args.numWorkers, reporter)
 
+	fmt.Println("Hashing src_dir files...")
 	srcHashes, err := hasher.WalkAndHash(args.srcDir)
+	reporter.finish()
 	if err != nil {
 		// Some hash walkers make use of MultiErrors, so we should try to unpack those first if we can.
 		handleError(err)
 		os.Exit(1)
 	}
 
+	fmt.Println("Hashing reference_dir files...")
 	referenceHashes, err := hasher.WalkAndHash(args.referenceDir)
+	reporter.finish()
 	if err != nil {
 		handleError(err)
 		os.Exit(1)
@@ -143,13 +148,13 @@ func handleError(err error) {
 }
 
 // getWalkHasher gets the approrpiate WalkHasher based on the number of workers
-func getWalkHasher(numWorkers int) hashlink.WalkHasher {
+func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.WalkHasher {
 	// If we only have one worker, there's no point in spinning up a parallel hash walker.
 	if numWorkers > 1 {
-		return hashlink.NewParallelWalkHasher(numWorkers, sha256.New)
+		return hashlink.NewParallelWalkHasher(numWorkers, sha256.New, hashlink.ParallelWalkHasherProgressReporter(reporter))
 	}
 
-	return hashlink.NewSerialWalkHasher(sha256.New)
+	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
 }
 
 // getConnectFunction gives a nop function if dryRun is try, the fallback otherwise.

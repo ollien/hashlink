@@ -11,10 +11,11 @@ import (
 
 // ParallelWalkHasher will hash all files concurrently, up to the number of specified workers
 type ParallelWalkHasher struct {
-	constructor func() hash.Hash
-	walker      pathWalker
-	numWorkers  int
-	errors      *multierror.MultiError
+	constructor      func() hash.Hash
+	walker           pathWalker
+	numWorkers       int
+	errors           *multierror.MultiError
+	progressReporter ProgressReporter
 }
 
 // hashResult represents the result of a hashing operation.
@@ -33,25 +34,41 @@ type parallelWalkHasherChannelSet struct {
 	resultChan chan hashResult
 }
 
+// ParallelWalkHasherProgressReporter will provide a ProgressReporter for a ParallelWalkWasher.
+// Intended to be passed to NewParallelWalkHasher as an option
+func ParallelWalkHasherProgressReporter(reporter ProgressReporter) func(*ParallelWalkHasher) {
+	return func(hasher *ParallelWalkHasher) {
+		hasher.progressReporter = reporter
+	}
+}
+
 // NewParallelWalkHasher makekes a new hash walker with a constructor for a hash algorithm and a number of workers
-func NewParallelWalkHasher(numWorkers int, constructor func() hash.Hash) *ParallelWalkHasher {
+func NewParallelWalkHasher(numWorkers int, constructor func() hash.Hash, options ...func(*ParallelWalkHasher)) *ParallelWalkHasher {
 	walker := fileWalker{}
 
-	return makeParallelHashWalker(numWorkers, walker, constructor)
+	return makeParallelHashWalker(numWorkers, walker, constructor, options...)
 }
 
 // makeParallelHashWalker will build a serial hash walker with the given spec. Used mainly as faux-dependency injection
-func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func() hash.Hash) *ParallelWalkHasher {
-	return &ParallelWalkHasher{
-		walker:      walker,
-		constructor: constructor,
-		numWorkers:  numWorkers,
+func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func() hash.Hash, options ...func(*ParallelWalkHasher)) *ParallelWalkHasher {
+	hasher := &ParallelWalkHasher{
+		walker:           walker,
+		constructor:      constructor,
+		numWorkers:       numWorkers,
+		progressReporter: nilProgressReporter{},
 	}
+
+	for _, optionFunc := range options {
+		optionFunc(hasher)
+	}
+
+	return hasher
 }
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
 func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	// Reset the errors from the last run
+	// TODO: This is not concurrency safe
 	hasher.errors = nil
 	channels := parallelWalkHasherChannelSet{
 		workChan:   make(chan pathedData),
@@ -64,23 +81,23 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	go hasher.collectResults(cancelFunc, &collectWaitGroup, channels, &outMap)
 
 	workerWaitGroup := sync.WaitGroup{}
-	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
-	err := hasher.walker.Walk(root, func(reader pathedData) error {
-		// Send some work, but we may need to bail out early if the context has been cancelled.
-		select {
-		case channels.workChan <- reader:
-		case <-ctx.Done():
-		}
-
-		return nil
-	})
-
-	// whether we got an error or not, we're done supplying work
-	close(channels.workChan)
+	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
 	if err != nil {
 		return nil, xerrors.Errorf("could not perform parallel hash walk: %w", err)
 	}
 
+	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
+	for i, reader := range walkerItems {
+		// Send some work, but we may need to bail out early if the context has been cancelled.
+		select {
+		case channels.workChan <- reader:
+			// Not the _MOST_ accurate, since we're really just reporting when work has been sent, but it's good enough.
+			hasher.progressReporter.ReportProgress(Progress(i * 100 / len(walkerItems)))
+		case <-ctx.Done():
+		}
+	}
+
+	close(channels.workChan)
 	workerWaitGroup.Wait()
 	collectWaitGroup.Wait()
 	// Avoid issues with typed nils being returned
