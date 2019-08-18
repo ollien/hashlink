@@ -37,3 +37,8 @@ func (reporter progressBarReporter) finish() {
 	progressBar := fmt.Sprintf(progressBarFormat, fullBar, 100)
 	fmt.Fprintf(os.Stderr, "\r%s\n", progressBar)
 }
+
+// when abort is called, we will give a carriage return and overwrite the progress bar, as there was an error
+func (reporter progressBarReporter) abort() {
+	fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", progressBarLength))
+}

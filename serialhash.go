@@ -61,8 +61,7 @@ func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 		err := hashReader(outHash, reader.data)
 		if err != nil {
 			err = xerrors.Errorf("could not hash path (%s): %w", reader.path, err)
-			errors.Append(err)
-			continue
+			return nil, err
 		}
 
 		walkedMap[reader.path] = outHash

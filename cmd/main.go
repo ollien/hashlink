@@ -41,25 +41,26 @@ func main() {
 
 	fmt.Println("Hashing src_dir files...")
 	srcHashes, err := hasher.WalkAndHash(args.srcDir)
-	reporter.finish()
 	if err != nil {
-		// Some hash walkers make use of MultiErrors, so we should try to unpack those first if we can.
+		reporter.abort()
 		handleError(err)
 		os.Exit(1)
 	}
 
+	reporter.finish()
 	fmt.Println("Hashing reference_dir files...")
 	referenceHashes, err := hasher.WalkAndHash(args.referenceDir)
-	reporter.finish()
 	if err != nil {
+		reporter.abort()
 		handleError(err)
 		os.Exit(1)
 	}
 
+	reporter.finish()
 	// Create a mapping of reference files to src files
 	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
 	missingFiles := findMissingFiles(srcHashes, referenceHashes, identicalFiles)
-	fmt.Print("Done scanning.")
+	fmt.Println("Done scanning.")
 	if len(missingFiles) > 0 {
 		missingFilesOutput, err := makeIndentedJSONOutput(missingFiles)
 		if err != nil {
