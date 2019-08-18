@@ -76,16 +76,17 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	}
 
 	outMap := sync.Map{}
-	collectWaitGroup := sync.WaitGroup{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	collectWaitGroup := sync.WaitGroup{}
+	collectWaitGroup.Add(1)
 	go hasher.collectResults(cancelFunc, &collectWaitGroup, channels, &outMap)
 
-	workerWaitGroup := sync.WaitGroup{}
 	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
 	if err != nil {
 		return nil, xerrors.Errorf("could not perform parallel hash walk: %w", err)
 	}
 
+	workerWaitGroup := sync.WaitGroup{}
 	hasher.spawnWorkers(ctx, &workerWaitGroup, channels)
 	for i, reader := range walkerItems {
 		// Send some work, but we may need to bail out early if the context has been cancelled.
@@ -120,8 +121,9 @@ func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *s
 			workChan:   channels.workChan,
 			resultChan: workerChannel,
 		}
+
+		waitGroup.Add(1)
 		go func() {
-			waitGroup.Add(1)
 			hasher.doHashWork(ctx, workerChannelSet)
 			waitGroup.Done()
 		}()
@@ -163,7 +165,6 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, channels paral
 
 // collectResults collects all of the results from workers
 func (hasher *ParallelWalkHasher) collectResults(cancelFunc context.CancelFunc, waitGroup *sync.WaitGroup, channels parallelWalkHasherChannelSet, outMap *sync.Map) {
-	waitGroup.Add(1)
 	defer waitGroup.Done()
 
 	for result := range channels.resultChan {
