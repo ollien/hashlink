@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/ollien/hashlink"
@@ -17,6 +18,7 @@ import (
 var (
 	errWrongNumberOfArguments = errors.New("wrong number of arguments")
 	errInvalidNumberOfWorkers = errors.New("invalid number of workers")
+	errOutDirNotEmpty         = errors.New("out_dir not empty")
 )
 
 // cliArgs rpresents the arguments that can be passed to the entrypoint command
@@ -32,7 +34,7 @@ type cliArgs struct {
 func main() {
 	args, err := setupAndValidateArgs()
 	if err != nil {
-		handleError(err)
+		handleArgsError(err, args)
 		os.Exit(1)
 	}
 
@@ -119,13 +121,23 @@ func setupAndValidateArgs() (cliArgs, error) {
 	args.referenceDir = flag.Arg(1)
 	args.outDir = flag.Arg(2)
 	err := assertDirsExist(args.srcDir, args.referenceDir, args.outDir)
+	if err != nil {
+		return args, err
+	}
 
-	return args, err
+	err = assertDirEmpty(args.outDir)
+	if err != nil {
+		return args, err
+	}
+
+	return args, nil
 }
 
-func handleArgsError(err error) {
+func handleArgsError(err error, args cliArgs) {
 	if err == errInvalidNumberOfWorkers {
-		fmt.Fprintf(os.Stderr, "Invalid number of workers. Must be >= 1")
+		fmt.Fprintf(os.Stderr, "Invalid number of workers (%d). Must be >= 1\n", args.numWorkers)
+	} else if err == errOutDirNotEmpty {
+		fmt.Fprintf(os.Stderr, "The provided out_dir (%s) is non-empty. Cowardly refusing to run.\n", args.outDir)
 	} else if err != errWrongNumberOfArguments {
 		// If we have errWrongNumberOfArguments, we don't need to do any special handling other than the usage string.
 		fmt.Fprintln(os.Stderr, err)
@@ -189,6 +201,19 @@ func assertDirsExist(dirs ...string) error {
 
 	if errors.Len() > 0 {
 		return errors
+	}
+
+	return nil
+}
+
+func assertDirEmpty(dir string) error {
+	contents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return xerrors.Errorf("could not read dir contents: %w", err)
+	}
+
+	if len(contents) > 0 {
+		return errOutDirNotEmpty
 	}
 
 	return nil
