@@ -234,31 +234,6 @@ func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.
 	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
 }
 
-// getHashes will get all of the hashes needed from the given directories
-func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.PathHashes, referenceHashes hashlink.PathHashes, err error) {
-	reporter := progressBarReporter{}
-	hasher := getWalkHasher(numWorkers, reporter)
-
-	fmt.Println("Hashing src_dir files...")
-	srcHashes, err = hasher.WalkAndHash(srcDir)
-	if err != nil {
-		reporter.abort()
-		return nil, nil, err
-	}
-
-	reporter.finish()
-	fmt.Println("Hashing reference_dir files...")
-	referenceHashes, err = hasher.WalkAndHash(referenceDir)
-	if err != nil {
-		reporter.abort()
-		return nil, nil, err
-	}
-
-	reporter.finish()
-
-	return srcHashes, referenceHashes, nil
-}
-
 // findMissingFiles will find all files missing in files that are in present in srcHashes or referenceHashes
 // files is expected to have files from srcDir as the keys, and referenceDir as the values
 func findMissingFiles(srcHashes, referenceHashes hashlink.PathHashes, files hashlink.FileMap) []string {
