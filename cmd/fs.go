@@ -22,7 +22,6 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/ollien/hashlink"
 	"github.com/ollien/hashlink/multierror"
 	"golang.org/x/xerrors"
 )
@@ -32,12 +31,11 @@ const defaultFileMode os.FileMode = 0755
 type connectFunction = func(src, dst string) error
 
 // connectFiles performs the given function op on all provided files, in order to form a connection between them, such
-// as copying or hard linking. All of the files in the keys of fileMap must be contained within srcDir, and outDir will
-// follow the same structur as srcDir. If the file does not exist in srcDir, no link will be created an error will be
-// returned for that file.
-func connectFiles(files hashlink.FileMap, srcDir, outDir string, op connectFunction) error {
+// as copying or hard linking. outDir will follow the same structur as srcDir. If the file does not exist in srcDir,
+// no connection will be created an error will be returned for that file.
+func connectFiles(files []string, srcDir, outDir string, op connectFunction) error {
 	errors := multierror.NewMultiError()
-	for file := range files {
+	for _, file := range files {
 		err := connectFile(file, srcDir, outDir, op)
 		if err != nil {
 			err = xerrors.Errorf("could not link file: %w", err)
@@ -83,18 +81,18 @@ func ensureContainingDirsArePresent(filePath string) error {
 func copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
-		return xerrors.Errorf("could not open %s for copying: %w", srcFile, err)
+		return xerrors.Errorf("could not open file (%s) for copying: %w", srcFile, err)
 	}
 
 	createMode := removeExecuteBits(defaultFileMode)
-	dstFile, err := os.OpenFile(dst, os.O_RDONLY|os.O_CREATE, createMode)
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, createMode)
 	if err != nil {
-		return xerrors.Errorf("could not open %s as copying destination: %w", dstFile, err)
+		return xerrors.Errorf("could not open path (%s) as copying destination: %w", dst, err)
 	}
 
 	_, err = io.Copy(dstFile, srcFile)
 	if err != nil {
-		return xerrors.Errorf("could noy copy %s to %s: %w", srcFile)
+		return xerrors.Errorf("could noy copy (%s => %s): %w", src, dst, err)
 	}
 
 	return nil

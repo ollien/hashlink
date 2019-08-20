@@ -54,6 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Println("Scanning files...")
 	srcHashes, referenceHashes, err := getHashes(args.srcDir, args.referenceDir, args.numWorkers)
 	if err != nil {
 		handleError(err)
@@ -78,15 +79,22 @@ func main() {
 		fmt.Print("\n")
 	}
 
+	filesToLink := getKeysFromFileMap(identicalFiles)
+	fmt.Printf("Linking %d files...\n", len(filesToLink))
 	op := getConnectFunction(args.dryRun, os.Link)
-	err = connectFiles(identicalFiles, args.srcDir, args.outDir, op)
+	err = connectFiles(filesToLink, args.srcDir, args.outDir, op)
 	if err != nil {
 		handleError(err)
 		os.Exit(1)
 	}
 
+	fmt.Printf("Copying %d files...\n", len(missingFiles))
 	op = getConnectFunction(args.dryRun, copyFile)
-	err = connectFiles(identicalFiles, args.srcDir, args.outDir, op)
+	err = connectFiles(missingFiles, args.referenceDir, args.outDir, op)
+	if err != nil {
+		handleError(err)
+		os.Exit(1)
+	}
 
 	output := "Done processing. Enjoy your files :)"
 	if args.dryRun {
@@ -263,4 +271,16 @@ func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.
 	}
 
 	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
+}
+
+// getKeysFromFileMap gets all of the files that are keys of a given FileMap
+func getKeysFromFileMap(files hashlink.FileMap) []string {
+	keys := make([]string, len(files))
+	i := 0
+	for key := range files {
+		keys[i] = key
+		i++
+	}
+
+	return keys
 }
