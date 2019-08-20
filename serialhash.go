@@ -55,15 +55,16 @@ func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	}
 
 	errors := multierror.NewMultiError()
+	hasher.progressReporter.ReportProgress(Progress(0))
 	for i, reader := range walkerItems {
 		outHash, err := hasher.processData(reader)
+		hasher.progressReporter.ReportProgress(Progress(i * 100 / len(walkerItems)))
 		if err != nil {
 			errors.Append(err)
 			continue
 		}
 
 		walkedMap[reader.path] = outHash
-		hasher.progressReporter.ReportProgress(Progress(i * 100 / len(walkerItems)))
 	}
 
 	if errors.Len() > 0 {

@@ -64,6 +64,7 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 		return nil, xerrors.Errorf("could not perform get items for parallel hash walk: %w", err)
 	}
 
+	hasher.progressReporter.ReportProgress(Progress(0))
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	workerWaitGroup := sync.WaitGroup{}
 	workChan := make(chan pathedData)
