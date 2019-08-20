@@ -27,7 +27,7 @@ type MultiError struct {
 	errorLock sync.RWMutex
 }
 
-// NewMultiError will make a MultiError with the given errors
+// NewMultiError will make a MultiError with the given errors.
 func NewMultiError(errors ...error) *MultiError {
 	errorList := errors
 	if len(errorList) == 0 {
@@ -39,7 +39,7 @@ func NewMultiError(errors ...error) *MultiError {
 	}
 }
 
-// Error will concatenate multiple errors
+// Error will concatenate multiple errors into a single error string.
 func (multiError *MultiError) Error() string {
 	multiError.errorLock.RLock()
 	defer multiError.errorLock.RUnlock()

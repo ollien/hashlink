@@ -109,7 +109,7 @@ func main() {
 	fmt.Println(output)
 }
 
-// Usage specifies the usage for the cmd package
+// Usage specifies the usage for the cmd package.
 func Usage() {
 	fmt.Fprintln(os.Stderr, "Usage: ./hashlink [-j n] [-n] [-c] src_dir reference_dir out_dir")
 	flag.PrintDefaults()
@@ -172,7 +172,7 @@ func handleError(err error) {
 }
 
 // getConnectFunction gives a nop function if dryRun is true, otherwise ensureContainingDirsArePresent and then fallback
-// are run otherwise.
+// are run.
 func getConnectFunction(dryRun bool, fallback connectFunction) connectFunction {
 	if dryRun {
 		return func(src, dst string) error {
@@ -195,8 +195,7 @@ func getConnectFunction(dryRun bool, fallback connectFunction) connectFunction {
 	}
 }
 
-// assertDirsExist will return true if all of the paths in the values of the map exist.
-// The keys of the map should map to the name of the directory to be put into the error
+// assertDirsExist will return nil if all of the paths given exist and are directories, and an error otherwise.
 func assertDirsExist(dirs ...string) error {
 	errors := multierror.NewMultiError()
 	for _, dir := range dirs {
@@ -220,6 +219,7 @@ func assertDirsExist(dirs ...string) error {
 	return nil
 }
 
+// assertDirEmpty will return nil if the given directory is empty, and an error otherwise.
 func assertDirEmpty(dir string) error {
 	contents, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -256,14 +256,14 @@ func getDryRunOutput(identicalFiles hashlink.FileMap, copiedFiles []string) stri
 	return out
 }
 
-// makeIndentedJSONOutput makes a JSON formatted string of the given item
+// makeIndentedJSONOutput makes a JSON formatted string of the given item.
 func makeIndentedJSONOutput(target interface{}) (string, error) {
 	out, err := json.MarshalIndent(target, "", "\t")
 
 	return string(out), err
 }
 
-// getWalkHasher gets the approrpiate WalkHasher based on the number of workers
+// getWalkHasher gets the approrpiate WalkHasher based on the number of workers.
 func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.WalkHasher {
 	// If we only have one worker, there's no point in spinning up a parallel hash walker.
 	if numWorkers > 1 {

@@ -38,7 +38,7 @@ func runPathTestTable(t *testing.T, table []pathTest) {
 
 func TestFindIdenticalFiles(t *testing.T) {
 	tests := []pathTest{
-		pathTest{
+		{
 			name: "empty maps",
 			test: func(t *testing.T) {
 				hashes := PathHashes{}
@@ -47,7 +47,7 @@ func TestFindIdenticalFiles(t *testing.T) {
 				assert.Equal(t, FileMap{}, res)
 			},
 		},
-		pathTest{
+		{
 			name: "empty source map",
 			test: func(t *testing.T) {
 				hashes := PathHashes{}
@@ -58,7 +58,7 @@ func TestFindIdenticalFiles(t *testing.T) {
 				assert.Equal(t, FileMap{}, res)
 			},
 		},
-		pathTest{
+		{
 			name: "one matching hash",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -85,7 +85,7 @@ func TestFindIdenticalFiles(t *testing.T) {
 				}, res)
 			},
 		},
-		pathTest{
+		{
 			name: "duplicate file in source",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -113,7 +113,7 @@ func TestFindIdenticalFiles(t *testing.T) {
 				}, res)
 			},
 		},
-		pathTest{
+		{
 			name: "duplicate file in other",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -152,7 +152,7 @@ func TestFindIdenticalFiles(t *testing.T) {
 
 func TestGetUnmappedFiles(t *testing.T) {
 	tests := []pathTest{
-		pathTest{
+		{
 			name: "no files",
 			test: func(t *testing.T) {
 				hashes := PathHashes{}
@@ -161,7 +161,7 @@ func TestGetUnmappedFiles(t *testing.T) {
 				assert.Equal(t, []string{}, unmappedFiles)
 			},
 		},
-		pathTest{
+		{
 			name: "only hash files",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -178,7 +178,7 @@ func TestGetUnmappedFiles(t *testing.T) {
 				assert.ElementsMatch(t, []string{"a/b", "b/c"}, unmappedFiles)
 			},
 		},
-		pathTest{
+		{
 			name: "only mapped files",
 			test: func(t *testing.T) {
 				hashes := PathHashes{}
@@ -191,7 +191,7 @@ func TestGetUnmappedFiles(t *testing.T) {
 				assert.ElementsMatch(t, []string{}, unmappedFiles)
 			},
 		},
-		pathTest{
+		{
 			name: "full intersection",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -211,7 +211,7 @@ func TestGetUnmappedFiles(t *testing.T) {
 				assert.ElementsMatch(t, []string{}, unmappedFiles)
 			},
 		},
-		pathTest{
+		{
 			name: "partial intersection",
 			test: func(t *testing.T) {
 				hash1 := sha256.New()
@@ -237,7 +237,7 @@ func TestGetUnmappedFiles(t *testing.T) {
 
 func TestMakeFlippedFileMap(t *testing.T) {
 	tests := []pathTest{
-		pathTest{
+		{
 			name: "no files",
 			test: func(t *testing.T) {
 				files := FileMap{}
@@ -245,7 +245,7 @@ func TestMakeFlippedFileMap(t *testing.T) {
 				assert.Equal(t, FileMap{}, flipped)
 			},
 		},
-		pathTest{
+		{
 			name: "unique files",
 			test: func(t *testing.T) {
 				files := FileMap{
@@ -264,7 +264,7 @@ func TestMakeFlippedFileMap(t *testing.T) {
 				}
 			},
 		},
-		pathTest{
+		{
 			name: "non-unique files",
 			test: func(t *testing.T) {
 				files := FileMap{

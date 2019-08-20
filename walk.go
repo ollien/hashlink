@@ -56,7 +56,7 @@ func (data pathedData) open() (io.ReadCloser, error) {
 	return openedFile, nil
 }
 
-// Walk acts as a simple wrapper for filepath.Walk, only processing regular files
+// Walk acts as a simple wrapper for filepath.Walk, only processing regular files.
 func (walker fileWalker) Walk(path string, process func(reader pathedData) error) error {
 	return filepath.Walk(path, func(walkedPath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -72,6 +72,7 @@ func (walker fileWalker) Walk(path string, process func(reader pathedData) error
 	})
 }
 
+// getAllItemsFromWalker gets every item that the given pathWalker would pass to its callback.
 func getAllItemsFromWalker(walker pathWalker, path string) ([]pathedData, error) {
 	result := make([]pathedData, 0)
 	err := walker.Walk(path, func(reader pathedData) error {

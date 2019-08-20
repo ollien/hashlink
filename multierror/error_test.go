@@ -49,7 +49,7 @@ func runMultiErrorTestTable(t *testing.T, table []multiErrorTest) {
 
 func TestMultiError_Error(t *testing.T) {
 	tests := []multiErrorTest{
-		multiErrorTest{
+		{
 			name: "no errors",
 			setup: func() *MultiError {
 				return NewMultiError()
@@ -58,7 +58,7 @@ func TestMultiError_Error(t *testing.T) {
 				assert.Equal(t, "", multiError.Error())
 			},
 		},
-		multiErrorTest{
+		{
 			name: "one error",
 			setup: func() *MultiError {
 				return NewMultiError(errors.New("something broke :("))
@@ -67,7 +67,7 @@ func TestMultiError_Error(t *testing.T) {
 				assert.Equal(t, "something broke :(", multiError.Error())
 			},
 		},
-		multiErrorTest{
+		{
 			name: "several errors",
 			setup: func() *MultiError {
 				errors := []error{
@@ -89,7 +89,7 @@ func TestMultiError_Error(t *testing.T) {
 
 func TestMultiError_Append(t *testing.T) {
 	tests := []multiErrorTest{
-		multiErrorTest{
+		{
 			name: "append error",
 			setup: func() *MultiError {
 				return NewMultiError()
@@ -101,7 +101,7 @@ func TestMultiError_Append(t *testing.T) {
 				assert.Equal(t, "something broke :(", multiError.Error())
 			},
 		},
-		multiErrorTest{
+		{
 			name: "append nil error",
 			setup: func() *MultiError {
 				return NewMultiError()
@@ -119,7 +119,7 @@ func TestMultiError_Append(t *testing.T) {
 
 func TestMultiError_Errors(t *testing.T) {
 	tests := []multiErrorTest{
-		multiErrorTest{
+		{
 			name: "no errors",
 			setup: func() *MultiError {
 				return NewMultiError()
@@ -128,7 +128,7 @@ func TestMultiError_Errors(t *testing.T) {
 				assert.Equal(t, []error{}, multiError.Errors())
 			},
 		},
-		multiErrorTest{
+		{
 			name: "some errors",
 			setup: func() *MultiError {
 				return NewMultiError(errors.New("an error"), errors.New("something broke :("))
@@ -140,16 +140,16 @@ func TestMultiError_Errors(t *testing.T) {
 				}, multiError.Errors())
 			},
 		},
-		multiErrorTest{
+		{
 			name: "ensure no mutation",
 			setup: func() *MultiError {
 				return NewMultiError()
 			},
 			test: func(t *testing.T, multiError *MultiError) {
 				specialErrors := []specialError{
-					specialError{5},
-					specialError{23},
-					specialError{42},
+					{5},
+					{23},
+					{42},
 				}
 
 				for _, err := range specialErrors {

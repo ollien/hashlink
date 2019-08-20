@@ -77,7 +77,7 @@ func runWalkTestTable(t *testing.T, table []walkTest) {
 
 func TestGetAllItemsFromWalker(t *testing.T) {
 	tests := []walkTest{
-		walkTest{
+		{
 			name: "no files",
 			setup: func() pathWalker {
 				files := map[string]string{}
@@ -91,7 +91,7 @@ func TestGetAllItemsFromWalker(t *testing.T) {
 				assert.Equal(t, 0, len(result))
 			},
 		},
-		walkTest{
+		{
 			name: "bunch of files",
 			setup: func() pathWalker {
 				files := map[string]string{

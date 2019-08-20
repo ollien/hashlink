@@ -25,7 +25,7 @@ import (
 	"golang.org/x/xerrors"
 )
 
-// ParallelWalkHasher will hash all files concurrently, up to the number of specified workers
+// ParallelWalkHasher will hash all files concurrently, up to the number of specified workers.
 type ParallelWalkHasher struct {
 	constructor      func() hash.Hash
 	walker           pathWalker
@@ -35,29 +35,31 @@ type ParallelWalkHasher struct {
 
 // hashResult represents the result of a hashing operation.
 type hashResult struct {
+	// path represents the location that has been hashed.
 	path string
-	// hash represents the hash of the data located at path
+	// hash represents the hash of the data located at path.
 	hash hash.Hash
 	// If an error occurred during operation, then err will be non-nil.
 	err error
 }
 
 // ParallelWalkHasherProgressReporter will provide a ProgressReporter for a ParallelWalkWasher.
-// Intended to be passed to NewParallelWalkHasher as an option
+// Intended to be passed to NewParallelWalkHasher as an option.
 func ParallelWalkHasherProgressReporter(reporter ProgressReporter) func(*ParallelWalkHasher) {
 	return func(hasher *ParallelWalkHasher) {
 		hasher.progressReporter = reporter
 	}
 }
 
-// NewParallelWalkHasher makekes a new hash walker with a constructor for a hash algorithm and a number of workers
+// NewParallelWalkHasher makekes a new ParallelWalkHasher with a constructor for a hash algorithm and a number
+// of workers.
 func NewParallelWalkHasher(numWorkers int, constructor func() hash.Hash, options ...func(*ParallelWalkHasher)) *ParallelWalkHasher {
 	walker := fileWalker{}
 
 	return makeParallelHashWalker(numWorkers, walker, constructor, options...)
 }
 
-// makeParallelHashWalker will build a serial hash walker with the given spec. Used mainly as faux-dependency injection
+// makeParallelHashWalker will build a ParallelWalkHasher with the given spec. Used mainly as faux-dependency injection
 func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func() hash.Hash, options ...func(*ParallelWalkHasher)) *ParallelWalkHasher {
 	hasher := &ParallelWalkHasher{
 		walker:           walker,
@@ -73,7 +75,7 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 	return hasher
 }
 
-// WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
+// WalkAndHash walks the given path across all workers and returns hashes for all the files in the path.
 func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
 	if err != nil {
@@ -85,6 +87,8 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	workerWaitGroup := sync.WaitGroup{}
 	workChan := make(chan pathedData)
 	errorChan := make(chan error)
+
+	// Spawn all workers, and send work to them
 	resultChan := hasher.spawnWorkers(ctx, &workerWaitGroup, workChan)
 	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan, errorChan)
 	collectedErrorChannel := hasher.collectErrors(errorChan)
@@ -119,7 +123,7 @@ func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *s
 	return mergeResultChannels(workerChannels)
 }
 
-// dispatchWork will send jobs to all workers through the given workChan
+// dispatchWork will send jobs to all workers through the given workChan.
 func (hasher *ParallelWalkHasher) dispatchWork(ctx context.Context, work []pathedData, workChan chan<- pathedData) {
 	for i, job := range work {
 		// Send some work, but we may need to bail out early if the context has been cancelled.
@@ -132,7 +136,7 @@ func (hasher *ParallelWalkHasher) dispatchWork(ctx context.Context, work []pathe
 	}
 }
 
-// doHashWork provides all of the coordination needed for workers to process hashes
+// doHashWork provides all of the coordination needed for workers to process hashes.
 func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-chan pathedData, resultChan chan<- hashResult) {
 	defer close(resultChan)
 	for {
@@ -157,7 +161,7 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-cha
 	}
 }
 
-// processData will perform the hash and any cleanup needed for the given reader
+// processData will perform the hash and any cleanup needed for the given reader.
 func (hasher *ParallelWalkHasher) processData(reader pathedData) (hash.Hash, error) {
 	outHash := hasher.constructor()
 	data, err := reader.open()
@@ -218,7 +222,7 @@ func (hasher *ParallelWalkHasher) collectErrors(errorChan <-chan error) <-chan *
 	return outChan
 }
 
-// mergeResultChannels will merge all channels of hashResult into a single channel
+// mergeResultChannels will merge all channels of hashResult into a single channel.
 func mergeResultChannels(workerChannels []chan hashResult) <-chan hashResult {
 	outChan := make(chan hashResult)
 	go func() {

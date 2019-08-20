@@ -69,18 +69,19 @@ func (reporter progressBarReporter) ReportProgress(progress hashlink.Progress) {
 	fmt.Fprintf(os.Stderr, "\r%s", progressBar)
 }
 
+// finish ensures that a full progress bar is displayed before any other output.
 func (reporter progressBarReporter) finish() {
 	fullBar := strings.Repeat("=", progressBarLength)
 	progressBar := fmt.Sprintf(progressBarFormat, fullBar, 100)
 	fmt.Fprintf(os.Stderr, "\r%s\n", progressBar)
 }
 
-// when abort is called, we will give a carriage return and overwrite the progress bar, as there was an error
+// abort will remove the current progress bar from the screen in perparation for displaying an error.
 func (reporter progressBarReporter) abort() {
 	fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", progressBarLength))
 }
 
-// newProgressReporterAggregator will make an aggregate proress reporter for the given reporter and length
+// newProgressReporterAggregator will make an aggregate proress reporter for the given reporter and length.
 func newProgressReporterAggregator(baseReporter hashlink.ProgressReporter, expectedLength int) *progressReporterAggregator {
 	return &progressReporterAggregator{
 		expectedLength:     expectedLength,
@@ -89,7 +90,7 @@ func newProgressReporterAggregator(baseReporter hashlink.ProgressReporter, expec
 	}
 }
 
-// reportSubProgress will take a progress and report the normalized progress to the base reporter
+// reportSubProgress will take a progress and report the normalized progress to the base reporter.
 func (aggregator *progressReporterAggregator) reportSubProgress(id uuid.UUID, subprogress hashlink.Progress) {
 	aggregator.progressLock.Lock()
 	defer aggregator.progressLock.Unlock()
@@ -114,6 +115,7 @@ func (aggregator *progressReporterAggregator) reportSubProgress(id uuid.UUID, su
 	aggregator.baseReporter.ReportProgress(normalizedProgress)
 }
 
+// newSubAggregateProgressReporter makes a subAggregateProcessReporter with the given aggregator.
 func newSubAggregateProgressReporter(aggregator *progressReporterAggregator) subAggregateProgressReporter {
 	return subAggregateProgressReporter{
 		id:     uuid.New(),
@@ -121,7 +123,7 @@ func newSubAggregateProgressReporter(aggregator *progressReporterAggregator) sub
 	}
 }
 
-// ReportProgress wil report the given progress to the parent aggregator
+// ReportProgress wil report the given progress to the parent aggregator.
 func (reporter subAggregateProgressReporter) ReportProgress(progress hashlink.Progress) {
 	reporter.parent.reportSubProgress(reporter.id, progress)
 }

@@ -23,8 +23,8 @@ import (
 	"golang.org/x/xerrors"
 )
 
-// SerialWalkHasher will hash all files one after the other
-// Implements HashWalker
+// SerialWalkHasher will hash all files one after the other.
+// Implements HashWalker.
 type SerialWalkHasher struct {
 	constructor      func() hash.Hash
 	walker           pathWalker
@@ -32,21 +32,21 @@ type SerialWalkHasher struct {
 }
 
 // SerialWalkHasherProgressReporter will provide a ProgressReporter for a SerialWalkHasher.
-// Intended to be passed to NewSerialWalkHasher as an option
+// Intended to be passed to NewSerialWalkHasher as an option.
 func SerialWalkHasherProgressReporter(reporter ProgressReporter) func(*SerialWalkHasher) {
 	return func(hasher *SerialWalkHasher) {
 		hasher.progressReporter = reporter
 	}
 }
 
-// NewSerialWalkHasher makes a new serial hasher with a constructor for a hash algorithm
+// NewSerialWalkHasher makes a new SerialWalkHasher with a constructor for a hash algorithm.
 func NewSerialWalkHasher(constructor func() hash.Hash, options ...func(*SerialWalkHasher)) *SerialWalkHasher {
 	walker := fileWalker{}
 
 	return makeSerialHashWalker(walker, constructor, options...)
 }
 
-// makeSerialHashWalker will build a serial hash walker with the given spec. Used mainly as faux-dependency injection
+// makeSerialHashWalker will build a SerialWalkHasher with the given spec. Used mainly as faux-dependency injection.
 func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash, options ...func(*SerialWalkHasher)) *SerialWalkHasher {
 	hasher := &SerialWalkHasher{
 		walker:           walker,
@@ -61,7 +61,7 @@ func makeSerialHashWalker(walker pathWalker, constructor func() hash.Hash, optio
 	return hasher
 }
 
-// WalkAndHash walks the given path and returns hashes for all the files in the path
+// WalkAndHash walks the given path and returns hashes for all the files in the path.
 func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	walkedMap := make(PathHashes)
 	// Walk all of the files and collect hashes for them
@@ -90,7 +90,7 @@ func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	return walkedMap, nil
 }
 
-// processData will perform the hash and any cleanup needed for the given reader
+// processData will perform the hash and any cleanup needed for the given reader.
 func (hasher SerialWalkHasher) processData(reader pathedData) (hash.Hash, error) {
 	data, err := reader.open()
 	if err != nil {

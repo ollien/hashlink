@@ -30,7 +30,7 @@ type dirResult struct {
 	err    error
 }
 
-// getHashes will get all of the hashes needed from the given directories
+// getHashes will get all of the hashes needed from the given directories.
 func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.PathHashes, referenceHashes hashlink.PathHashes, err error) {
 	reporter := progressBarReporter{}
 	reporterAggregator := newProgressReporterAggregator(reporter, 2)
@@ -79,7 +79,7 @@ func getHashesForDir(dir string, numWorkers int, aggregator *progressReporterAgg
 	return resultChan
 }
 
-// mergeResultChannels will merge all channels of hashResult into a single channel
+// mergeResultChannels will merge all channels of hashResult into a single channel.
 func mergeResultChannels(resultChannels ...<-chan dirResult) <-chan dirResult {
 	outChan := make(chan dirResult)
 	go func() {

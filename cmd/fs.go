@@ -31,8 +31,9 @@ const defaultFileMode os.FileMode = 0755
 type connectFunction = func(src, dst string) error
 
 // connectFiles performs the given function op on all provided files, in order to form a connection between them, such
-// as copying or hard linking. outDir will follow the same structur as srcDir. If the file does not exist in srcDir,
-// no connection will be created an error will be returned for that file.
+// as copying or hard linking. outDir will follow the same structure as srcDir. If the file does not exist in srcDir,
+// no connection will be created an error will be returned for that file, but connecting will continue for all other
+// files.
 func connectFiles(files []string, srcDir, outDir string, op connectFunction) error {
 	errors := multierror.NewMultiError()
 	for _, file := range files {
@@ -64,7 +65,7 @@ func connectFile(srcPath, srcDir, outDir string, op connectFunction) error {
 	return op(srcPath, outPath)
 }
 
-// ensureContainignDirsArepResent ensures that the dirs needed for a file are fully present. Will make the directories
+// ensureContainingDirsArePresent ensures that the dirs needed for a file are fully present. Will make the directories
 // if needed. All file modes will be defaultFileMode, and should be corrected by the caller if anything else is desired.
 func ensureContainingDirsArePresent(filePath string) error {
 	dirComponent := path.Dir(filePath)
