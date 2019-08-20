@@ -212,6 +212,7 @@ func (hasher *ParallelWalkHasher) collectErrors(errorChan <-chan error) <-chan *
 		}
 
 		outChan <- errors
+		close(outChan)
 	}()
 
 	return outChan
