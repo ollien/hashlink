@@ -59,22 +59,20 @@ func makeParallelHashWalker(numWorkers int, walker pathWalker, constructor func(
 
 // WalkAndHash walks the given path across all workers and returns hashes for all the files in the path
 func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
-	workChan := make(chan pathedData)
-	resultChan := make(chan hashResult)
-	errorChan := make(chan error)
-
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan, errorChan)
-	collectedErrorChannel := hasher.collectErrors(errorChan)
-
-	workerWaitGroup := sync.WaitGroup{}
 	walkerItems, err := getAllItemsFromWalker(hasher.walker, root)
 	if err != nil {
 		return nil, xerrors.Errorf("could not perform get items for parallel hash walk: %w", err)
 	}
 
-	hasher.spawnWorkers(ctx, &workerWaitGroup, workChan, resultChan)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	workerWaitGroup := sync.WaitGroup{}
+	workChan := make(chan pathedData)
+	errorChan := make(chan error)
+	resultChan := hasher.spawnWorkers(ctx, &workerWaitGroup, workChan)
+	collectedResultChannel := hasher.collectResults(cancelFunc, resultChan, errorChan)
+	collectedErrorChannel := hasher.collectErrors(errorChan)
 	hasher.dispatchWork(ctx, walkerItems, workChan)
+
 	close(workChan)
 	workerWaitGroup.Wait()
 	results := <-collectedResultChannel
@@ -88,8 +86,8 @@ func (hasher *ParallelWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	return results, retErr
 }
 
-// spawnWorkers spawns all workers needed for hashing
-func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *sync.WaitGroup, workChan <-chan pathedData, resultChan chan<- hashResult) {
+// spawnWorkers spawns all workers needed for hashing. All worker results will be returned on the provided channel.
+func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *sync.WaitGroup, workChan <-chan pathedData) <-chan hashResult {
 	workerChannels := make([]chan hashResult, hasher.numWorkers)
 	for i := 0; i < hasher.numWorkers; i++ {
 		workerChannel := make(chan hashResult)
@@ -101,7 +99,7 @@ func (hasher *ParallelWalkHasher) spawnWorkers(ctx context.Context, waitGroup *s
 		}()
 	}
 
-	go mergeResultChannels(workerChannels, resultChan)
+	return mergeResultChannels(workerChannels)
 }
 
 // dispatchWork will send jobs to all workers through the given workChan
@@ -190,19 +188,24 @@ func (hasher *ParallelWalkHasher) collectErrors(errorChan <-chan error) <-chan *
 }
 
 // mergeResultChannels will merge all channels of hashResult into a single channel
-func mergeResultChannels(workerChannels []chan hashResult, outChannel chan<- hashResult) {
-	waitGroup := sync.WaitGroup{}
-	for _, workerChan := range workerChannels {
-		waitGroup.Add(1)
-		go func(workerChan chan hashResult) {
-			for result := range workerChan {
-				outChannel <- result
-			}
-			waitGroup.Done()
-		}(workerChan)
-	}
+func mergeResultChannels(workerChannels []chan hashResult) <-chan hashResult {
+	outChan := make(chan hashResult)
+	go func() {
+		waitGroup := sync.WaitGroup{}
+		for _, workerChan := range workerChannels {
+			waitGroup.Add(1)
+			go func(workerChan <-chan hashResult, outChan chan<- hashResult) {
+				for result := range workerChan {
+					outChan <- result
+				}
+				waitGroup.Done()
+			}(workerChan, outChan)
+		}
 
-	// When we're done merging all of the results, we can safely close the channel
-	waitGroup.Wait()
-	close(outChannel)
+		// When we're done merging all of the results, we can safely close the channel
+		waitGroup.Wait()
+		close(outChan)
+	}()
+
+	return outChan
 }
