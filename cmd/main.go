@@ -72,6 +72,7 @@ func main() {
 		if err != nil {
 			err = xerrors.Errorf("could not generate missing file output: %w", err)
 			handleError(err)
+			os.Exit(1)
 		}
 
 		fmt.Printf("The following files will not be linked.\n%v\n", missingFilesOutput)
