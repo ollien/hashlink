@@ -126,13 +126,7 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-cha
 				return
 			}
 
-			outHash := hasher.constructor()
-			defer reader.data.Close()
-			err := hashReader(outHash, reader.data)
-			if err != nil {
-				err = xerrors.Errorf("could not hash reader in worker: %w", err)
-			}
-
+			outHash, err := hasher.processData(reader)
 			result := hashResult{
 				path: reader.path,
 				hash: outHash,
@@ -144,6 +138,25 @@ func (hasher *ParallelWalkHasher) doHashWork(ctx context.Context, workChan <-cha
 			return
 		}
 	}
+}
+
+// processData will perform the hash and any cleanup needed for the given reader
+func (hasher *ParallelWalkHasher) processData(reader pathedData) (hash.Hash, error) {
+	outHash := hasher.constructor()
+	data, err := reader.open()
+	if err != nil {
+		err = xerrors.Errorf("could not open data for path (%s) in worker: %w", reader.path, err)
+		return nil, err
+	}
+
+	defer data.Close()
+	err = hashReader(outHash, data)
+	if err != nil {
+		err = xerrors.Errorf("could not hash reader in worker: %w", err)
+		return nil, err
+	}
+
+	return outHash, nil
 }
 
 // collectResults collects all of the results from workers, and will return it on the provided channel when complete.

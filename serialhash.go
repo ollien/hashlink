@@ -56,12 +56,10 @@ func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 
 	errors := multierror.NewMultiError()
 	for i, reader := range walkerItems {
-		defer reader.data.Close()
-		outHash := hasher.constructor()
-		err := hashReader(outHash, reader.data)
+		outHash, err := hasher.processData(reader)
 		if err != nil {
-			err = xerrors.Errorf("could not hash path (%s): %w", reader.path, err)
-			return nil, err
+			errors.Append(err)
+			continue
 		}
 
 		walkedMap[reader.path] = outHash
@@ -73,4 +71,23 @@ func (hasher SerialWalkHasher) WalkAndHash(root string) (PathHashes, error) {
 	}
 
 	return walkedMap, nil
+}
+
+// processData will perform the hash and any cleanup needed for the given reader
+func (hasher SerialWalkHasher) processData(reader pathedData) (hash.Hash, error) {
+	data, err := reader.open()
+	if err != nil {
+		err = xerrors.Errorf("could not open data for path (%s)", reader.path, err)
+		return nil, err
+	}
+
+	defer data.Close()
+	outHash := hasher.constructor()
+	err = hashReader(outHash, data)
+	if err != nil {
+		err = xerrors.Errorf("could not hash path (%s): %w", reader.path, err)
+		return nil, err
+	}
+
+	return outHash, nil
 }
