@@ -38,7 +38,7 @@ type hashResult struct {
 	path string
 	// hash represents the hash of the data located at path
 	hash hash.Hash
-	// If an error occured during operation, then err will be non-nil.
+	// If an error occurred during operation, then err will be non-nil.
 	err error
 }
 

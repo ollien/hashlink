@@ -48,7 +48,7 @@ func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.
 		}
 	}
 
-	// avoid returns wtih type nils by specifying our nil error here
+	// avoid returns with type nils by specifying our nil error here
 	retErr := error(nil)
 	if errors.Len() > 0 {
 		retErr = errors

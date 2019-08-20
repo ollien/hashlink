@@ -21,7 +21,7 @@ import (
 	"sync"
 )
 
-// MultiError represents a set of errors that occured. Implements the error interface.
+// MultiError represents a set of errors that occurred. Implements the error interface.
 type MultiError struct {
 	errors    []error
 	errorLock sync.RWMutex

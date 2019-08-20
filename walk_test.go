@@ -53,7 +53,7 @@ func (walker staticWalker) Walk(root string, process func(reader pathedData) err
 	return nil
 }
 
-// Close will simply nop. Implemented so strings.Reader can fufill the ReadCloser interface.
+// Close will simply nop. Implemented so strings.Reader can fulfill the ReadCloser interface.
 func (r *closableStringReader) Close() error {
 	r.closeCount++
 
