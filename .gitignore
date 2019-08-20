@@ -2,4 +2,4 @@ hashlink
 cmd/cmd
 .vscode
 .tags
-.sw?
+*.sw?
