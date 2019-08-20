@@ -62,11 +62,6 @@ func connectFile(srcPath, srcDir, outDir string, op connectFunction) error {
 	}
 
 	outPath := path.Join(outDir, relSrcPath)
-	// TODO: correct permissions of directory to match original
-	err = ensureContainingDirsArePresent(outPath)
-	if err != nil {
-		return xerrors.Errorf("could not make directories for linking file (%s => %s): %w", srcPath, outPath, err)
-	}
 
 	return op(srcPath, outPath)
 }

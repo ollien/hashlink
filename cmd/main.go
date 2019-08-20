@@ -163,7 +163,8 @@ func handleError(err error) {
 	}
 }
 
-// getConnectFunction gives a nop function if dryRun is try, the fallback otherwise.
+// getConnectFunction gives a nop function if dryRun is true, otherwise ensureContainingDirsArePresent and then fallback
+// are run otherwise.
 func getConnectFunction(dryRun bool, fallback connectFunction) connectFunction {
 	if dryRun {
 		return func(src, dst string) error {
@@ -171,7 +172,19 @@ func getConnectFunction(dryRun bool, fallback connectFunction) connectFunction {
 		}
 	}
 
-	return fallback
+	return func(src, dst string) error {
+		err := ensureContainingDirsArePresent(dst)
+		if err != nil {
+			return xerrors.Errorf("could not ensure containing directories exst for connecting (%s => %s): %w", src, dst, err)
+		}
+
+		err = fallback(src, dst)
+		if err != nil {
+			return xerrors.Errorf("could not connect files (%s => %s): %w", src, dst, err)
+		}
+
+		return nil
+	}
 }
 
 // assertDirsExist will return true if all of the paths in the values of the map exist.
