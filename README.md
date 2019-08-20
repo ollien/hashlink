@@ -1,5 +1,7 @@
 # hashlink
 
+[![Build Status](https://travis-ci.com/ollien/hashlink.svg?token=CfrpsYmyyBbmjKpQ8mA1&branch=master)](https://travis-ci.com/ollien/hashlink)
+
 Hashlink is a utility designed to perform migrations of duplicated data in a set of drives. Specifically, it is designed
 to free up space when one file is duplicated between drives, even when their filenames differ. Hashlink will take all
 matching files and hardlink them to the given destination location. Hashlink makes heavy use of concurrency to split up
