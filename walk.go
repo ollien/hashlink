@@ -48,6 +48,7 @@ func (data pathedData) open() (io.ReadCloser, error) {
 	openedFile, err := os.Open(data.path)
 	if err != nil {
 		err = xerrors.Errorf("could not open file (%s): %w", data.path, err)
+		return nil, err
 	}
 
 	data.data = openedFile

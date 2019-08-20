@@ -169,7 +169,7 @@ func (hasher *ParallelWalkHasher) processData(reader pathedData) (hash.Hash, err
 	defer data.Close()
 	err = hashReader(outHash, data)
 	if err != nil {
-		err = xerrors.Errorf("could not hash reader in worker: %w", err)
+		err = xerrors.Errorf("could not hash reader in worker (%s): %w", reader.path, err)
 		return nil, err
 	}
 
