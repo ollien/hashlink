@@ -88,12 +88,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Copying %d files...\n", len(missingFiles))
-	op = getConnectFunction(args.dryRun, copyFile)
-	err = connectFiles(missingFiles, args.referenceDir, args.outDir, op)
-	if err != nil {
-		handleError(err)
-		os.Exit(1)
+	if args.copyMissing {
+		fmt.Printf("Copying %d files...\n", len(missingFiles))
+		op = getConnectFunction(args.dryRun, copyFile)
+		err = connectFiles(missingFiles, args.referenceDir, args.outDir, op)
+		if err != nil {
+			handleError(err)
+			os.Exit(1)
+		}
 	}
 
 	output := "Done processing. Enjoy your files :)"
