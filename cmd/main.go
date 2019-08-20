@@ -44,9 +44,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a mapping of reference files to src files
+	// Create a mapping of src files to reference files
 	identicalFiles := hashlink.FindIdenticalFiles(srcHashes, referenceHashes)
-	missingFiles := findMissingFiles(srcHashes, referenceHashes, identicalFiles)
+	// In order to get the files missing from the reference directory, we must flip our file map into reference => src order
+	flippedFiles := hashlink.MakeFlippedFileMap(identicalFiles)
+	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, flippedFiles)
 	fmt.Println("Done scanning.")
 	if len(missingFiles) > 0 {
 		missingFilesOutput, err := makeIndentedJSONOutput(missingFiles)
@@ -94,7 +96,7 @@ func setupAndValidateArgs() (cliArgs, error) {
 	flag.Usage = Usage
 	flag.IntVar(&args.numWorkers, "j", 1, "specify a number of workers")
 	flag.BoolVar(&args.dryRun, "n", false, "do not link any files, but print out what files would have been linked")
-	flag.BoolVar(&args.copyMissing, "c", false, "copy the files that are missing from either src_dir or reference_dir")
+	flag.BoolVar(&args.copyMissing, "c", false, "copy the files that are missing from src_dir")
 	flag.Parse()
 	if flag.NArg() != 3 {
 		return cliArgs{}, errWrongNumberOfArguments
@@ -232,16 +234,4 @@ func getWalkHasher(numWorkers int, reporter hashlink.ProgressReporter) hashlink.
 	}
 
 	return hashlink.NewSerialWalkHasher(sha256.New, hashlink.SerialWalkHasherProgressReporter(reporter))
-}
-
-// findMissingFiles will find all files missing in files that are in present in srcHashes or referenceHashes
-// files is expected to have files from srcDir as the keys, and referenceDir as the values
-func findMissingFiles(srcHashes, referenceHashes hashlink.PathHashes, files hashlink.FileMap) []string {
-	// To get missing files for the refernce dir, we must make our map in order of reference => src
-	flippedFiles := hashlink.MakeFlippedFileMap(files)
-	missingFiles := hashlink.GetUnmappedFiles(referenceHashes, flippedFiles)
-	missingSrcFiles := hashlink.GetUnmappedFiles(srcHashes, files)
-	missingFiles = append(missingFiles, missingSrcFiles...)
-
-	return missingFiles
 }
