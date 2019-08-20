@@ -28,7 +28,7 @@ func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.
 	for result := range resultChan {
 		hashes[result.dir] = result.hashes
 		if result.err != nil {
-			errors.Append(errors)
+			errors.Append(result.err)
 		}
 	}
 
