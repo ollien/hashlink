@@ -32,11 +32,13 @@ func getHashes(srcDir, referenceDir string, numWorkers int) (srcHashes hashlink.
 		}
 	}
 
-	reporter.finish()
 	// avoid returns wtih type nils by specifying our nil error here
 	retErr := error(nil)
 	if errors.Len() > 0 {
 		retErr = errors
+		reporter.abort()
+	} else {
+		reporter.finish()
 	}
 
 	return hashes[srcDir], hashes[referenceDir], retErr
