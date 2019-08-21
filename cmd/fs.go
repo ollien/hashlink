@@ -33,7 +33,7 @@ type connectFunction = func(src, dst string) error
 
 // connectMappedFiles performs the given function op on all provided files (expected in src => reference order), in
 // order to form a connection between them, such as copying or hardlinking. If the file in the value portion of files
-// does not exist in referenceDir,  no connection will be created an error will be returned for that file, but
+// does not exist in referenceDir, no connection will be created an error will be returned for that file, but
 // connecting will continue for all other files.
 func connectMappedFiles(files hashlink.FileMap, referenceDir, outDir string, op connectFunction) error {
 	errors := multierror.NewMultiError()
