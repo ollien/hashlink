@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/ollien/hashlink"
 	"github.com/ollien/hashlink/multierror"
 	"golang.org/x/xerrors"
 )
@@ -30,16 +31,56 @@ const defaultFileMode os.FileMode = 0755
 
 type connectFunction = func(src, dst string) error
 
+// connectMappedFiles performs the given function op on all provided files (expected in src => reference order), in
+// order to form a connection between them, such as copying or hardlinking. If the file in the value portion of files
+// does not exist in referenceDir,  no connection will be created an error will be returned for that file, but
+// connecting will continue for all other files.
+func connectMappedFiles(files hashlink.FileMap, referenceDir, outDir string, op connectFunction) error {
+	errors := multierror.NewMultiError()
+	for srcFile, referenceFiles := range files {
+		for _, referenceFile := range referenceFiles {
+			err := connectMappedFile(srcFile, referenceFile, referenceDir, outDir, op)
+			if err != nil {
+				err = xerrors.Errorf("could not link file (%s): %w", srcFile, err)
+				errors.Append(err)
+			}
+		}
+	}
+
+	if errors.Len() > 0 {
+		return errors
+	}
+
+	return nil
+}
+
+// connectMappedFile will connect srcPath to a file in outDir that is relative to outDir in the same fashion that
+// referencePath is relative to referenceDir. If referencePath is not relative to referenceDir, an error is returned
+// and no connection will take place.
+func connectMappedFile(srcPath, referencePath, referenceDir, outDir string, op connectFunction) error {
+	relReferencePath, err := filepath.Rel(referenceDir, referencePath)
+	if err != nil {
+		return xerrors.Errorf("could not produce relative path for file connection: %w", err)
+	}
+
+	outPath := path.Join(outDir, relReferencePath)
+	err = op(srcPath, outPath)
+	if err != nil {
+		return xerrors.Errorf("could not connect path (%s => %s): %w", srcPath, outPath)
+	}
+
+	return nil
+}
+
 // connectFiles performs the given function op on all provided files, in order to form a connection between them, such
-// as copying or hard linking. outDir will follow the same structure as srcDir. If the file does not exist in srcDir,
-// no connection will be created an error will be returned for that file, but connecting will continue for all other
-// files.
-func connectFiles(files []string, srcDir, outDir string, op connectFunction) error {
+// as copying or hardlinking. If the file does not exist in baseDir, an error will be returned for that file, but
+// connecting will continue for all other files.
+func connectFiles(files []string, baseDir, outDir string, op connectFunction) error {
 	errors := multierror.NewMultiError()
 	for _, file := range files {
-		err := connectFile(file, srcDir, outDir, op)
+		err := connectFile(file, baseDir, outDir, op)
 		if err != nil {
-			err = xerrors.Errorf("could not link file: %w", err)
+			err = xerrors.Errorf("could not link file (%s): %w", file, err)
 			errors.Append(err)
 		}
 	}
@@ -51,18 +92,13 @@ func connectFiles(files []string, srcDir, outDir string, op connectFunction) err
 	return nil
 }
 
-// connectFiles performs the given function op on the provided file, in order to form a connection between them, such
-// as copying or hard linking. outDir will follow the same structur as srcDir. If the file does not exist in srcDir,
-// no link will be created an error will be  returned for that file.
-func connectFile(srcPath, srcDir, outDir string, op connectFunction) error {
-	relSrcPath, err := filepath.Rel(srcDir, srcPath)
-	if err != nil {
-		return xerrors.Errorf("could not produce relative path for file linking - srcPath may not be contained in srcDir: %w", err)
-	}
-
-	outPath := path.Join(outDir, relSrcPath)
-
-	return op(srcPath, outPath)
+// connectFile will connect path to a file in outDir that is relative to outDir in the same fashion that it is
+// relative to baseDir. If the given path is not relative to srcDir, an error is returned and no connection will
+// take place.
+func connectFile(path, baseDir, outDir string, op connectFunction) error {
+	// This looks a little silly, but path can safely act as our "referencePath", as we are still operating relative
+	// to it.
+	return connectMappedFile(path, path, baseDir, outDir, op)
 }
 
 // ensureContainingDirsArePresent ensures that the dirs needed for a file are fully present. Will make the directories

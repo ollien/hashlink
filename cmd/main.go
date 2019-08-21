@@ -80,10 +80,9 @@ func main() {
 		fmt.Print("\n")
 	}
 
-	filesToLink := getKeysFromFileMap(identicalFiles)
-	fmt.Printf("Linking %d files...\n", len(filesToLink))
+	fmt.Printf("Linking %d files...\n", len(identicalFiles))
 	op := getConnectFunction(args.dryRun, os.Link)
-	err = connectFiles(filesToLink, args.srcDir, args.outDir, op)
+	err = connectMappedFiles(identicalFiles, args.referenceDir, args.outDir, op)
 	if err != nil {
 		handleError(err)
 		os.Exit(1)
